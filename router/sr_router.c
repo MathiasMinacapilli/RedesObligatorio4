@@ -53,6 +53,7 @@ void sr_init(struct sr_instance* sr)
 } /* -- sr_init -- */
 
 /* Send an ARP request. */
+/*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
 void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
 
 }
@@ -154,25 +155,45 @@ int is_for_my_interfaces(struct sr_instances *sr, uint8_t *packet) {
 }
 */
 
+uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, unsigned char* destiny_MAC, uint32_t source_IP, uint32_t destiny_IP, unsigned short oper){
+    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+    uint8_t *ethPacket = malloc(ethPacketLen);
+    sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
+    memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
+    memcpy(ethHdr->ether_shost, source_MAC, sizeof(uint8_t) * ETHER_ADDR_LEN);
+    ethHdr->ether_type = htons(ethertype_arp);
+    sr_arp_hdr_t *arpHdr = (sr_arp_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
+    arpHdr->ar_hrd = htons(1);
+    arpHdr->ar_pro = htons(2048);
+    arpHdr->ar_hln = 6;
+    arpHdr->ar_pln = 4;
+    arpHdr->ar_op = htons(oper);
+    memcpy(arpHdr->ar_sha, source_MAC, ETHER_ADDR_LEN);
+    memcpy(arpHdr->ar_tha, destiny_MAC, ETHER_ADDR_LEN);
+    arpHdr->ar_sip = source_IP;
+    arpHdr->ar_tip = destiny_IP;
+    return ethPacket;
+}
+
 void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet) {
   /* arp_request */
   struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) packet;
-  uint32_t interface_ip = 0;
-  struct sr_if* interfaces = sr->if_list;
-  int found_ip = 0;
-  while (interfaces != NULL && found_ip == 0) {
-    if (interfaces->addr == interface) {
-      interface_ip = interfaces->ip;
-      found_ip = 1;
-    }
-  }
-  if (interface_ip == arp_hdr->ar_tip) {
-    /* la request pregunta por mi ip */
+  uint32_t requested_ip = arp_hdr->ar_tip;
+  struct sr_if* requested_interface = sr_get_interface_given_ip(sr, requested_ip);
+  if (requested_interface == 0){
+      /*descarto el paquete*/
+      return;
+  } else {
+      /*crea respuesta arp*/
+      uint8_t * arp_packet = create_arp_packet(sr, requested_interface->addr, arp_hdr->ar_sha, requested_interface->ip, arp_hdr->ar_sip, arp_op_reply);
+      sr_send_packet(sr, arp_packet, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), requested_interface->name);
   }
 }
 
-void handle_arp_reply() {
+
+void handle_arp_reply(struct sr_instance *sr, unsigned char* MAC_destino, uint32_t source_ip) {
   /* arp_reply */
+  add_or_update_ARP_cache(source_ip, MAC_destino, sr);
 }
 
 void sr_handle_arp_packet(struct sr_instance *sr,
@@ -204,7 +225,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
 
   /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
   else if (op == arp_op_reply) {
-    handle_arp_reply();
+    handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
   }
 }
 
