@@ -22,6 +22,7 @@
 #include "sr_protocol.h"
 #include "sr_arpcache.h"
 #include "sr_utils.h"
+#include "sr_arpcache.h"
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -66,6 +67,38 @@ void sr_send_icmp_error_packet(uint8_t type,
 
 }
 
+sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
+  sr_arp_hdr_t *arp_hdr_from_packet = (sr_arp_hdr_t *) packet;
+  sr_arp_hdr_t *arp_hdr = malloc(sizeof(sr_arp_hdr_t));
+
+  // Copio la memoria del paquete a mi header nuevo casteado
+  memcpy(&(arp_hdr->ar_hrd), &(arp_hdr_from_packet->ar_hrd), sizeof(unsigned short));
+  memcpy(&(arp_hdr->ar_pro), &(arp_hdr_from_packet->ar_pro), sizeof(unsigned short));
+  memcpy(&(arp_hdr->ar_hln), &(arp_hdr_from_packet->ar_hln), sizeof(unsigned char));
+  memcpy(&(arp_hdr->ar_pln), &(arp_hdr_from_packet->ar_pln), sizeof(unsigned char));
+
+  memcpy(&(arp_hdr->ar_op), &(arp_hdr_from_packet->ar_op), sizeof(unsigned short));
+  memcpy(
+    &(arp_hdr->ar_sha[ETHER_ADDR_LEN]), 
+    &(arp_hdr->ar_sha[ETHER_ADDR_LEN]), 
+    sizeof(unsigned char) * ETHER_ADDR_LEN
+  );
+  memcpy(&(arp_hdr->ar_sip), &(arp_hdr->ar_sip), sizeof(uint32_t));
+  memcpy(
+    &(arp_hdr->ar_tha[ETHER_ADDR_LEN]), 
+    &(arp_hdr->ar_tha[ETHER_ADDR_LEN]), 
+    sizeof(unsigned char) * ETHER_ADDR_LEN
+  );
+  memcpy(&(arp_hdr->ar_tip), &(arp_hdr->ar_tip), sizeof(uint32_t));
+
+  return arp_hdr;
+}
+
+/* add or update sender to ARP cache */
+void add_or_update_ARP_cache(struct sr_arpcache *cache, uint32_t sip, unsigned char sha) {
+  struct sr_arpreq *arp_req = sr_arpcache_insert(cache, sha, sip);
+}
+
 void sr_handle_arp_packet(struct sr_instance *sr,
         uint8_t *packet /* lent */,
         unsigned int len,
@@ -75,8 +108,12 @@ void sr_handle_arp_packet(struct sr_instance *sr,
         sr_ethernet_hdr_t *eHdr) {
 
   /* Get ARP header and addresses */
+  sr_arp_hdr_t* arp_hdr = get_arp_header(packet);
 
   /* add or update sender to ARP cache*/
+  // actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
+  // en la cache arp
+  add_or_update_ARP_cache(sr->cache, arp_hdr->ar_sip, arp_hdr->ar_sha);
 
   /* check if the ARP packet is for one of my interfaces. */
 
