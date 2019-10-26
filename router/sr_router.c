@@ -70,33 +70,109 @@ void sr_send_icmp_error_packet(uint8_t type,
 sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
   sr_arp_hdr_t *arp_hdr_from_packet = (sr_arp_hdr_t *) packet;
   sr_arp_hdr_t *arp_hdr = malloc(sizeof(sr_arp_hdr_t));
+  size_t desplazamiento = 0;
 
-  // Copio la memoria del paquete a mi header nuevo casteado
-  memcpy(&(arp_hdr->ar_hrd), &(arp_hdr_from_packet->ar_hrd), sizeof(unsigned short));
-  memcpy(&(arp_hdr->ar_pro), &(arp_hdr_from_packet->ar_pro), sizeof(unsigned short));
-  memcpy(&(arp_hdr->ar_hln), &(arp_hdr_from_packet->ar_hln), sizeof(unsigned char));
-  memcpy(&(arp_hdr->ar_pln), &(arp_hdr_from_packet->ar_pln), sizeof(unsigned char));
+  /*Copio la memoria del paquete a mi header nuevo casteado*/
+  
+  /*ar_hrd*/
+  memcpy(arp_hdr+desplazamiento, arp_hdr_from_packet+desplazamiento, sizeof(unsigned short));  
+  desplazamiento += sizeof(unsigned short);
+  
+  /*ar_pro*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned short));
+  desplazamiento += sizeof(unsigned short);
+  
+  /*ar_hln*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned char));
+  desplazamiento += sizeof(unsigned char);
+  
+  /*ar_pln*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned char));
+  desplazamiento += sizeof(unsigned char);
 
-  memcpy(&(arp_hdr->ar_op), &(arp_hdr_from_packet->ar_op), sizeof(unsigned short));
-  memcpy(
-    &(arp_hdr->ar_sha[ETHER_ADDR_LEN]), 
-    &(arp_hdr->ar_sha[ETHER_ADDR_LEN]), 
+  /*ar_op*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned short));
+  desplazamiento += sizeof(unsigned short);
+  
+  /*ar_sha*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, 
     sizeof(unsigned char) * ETHER_ADDR_LEN
   );
-  memcpy(&(arp_hdr->ar_sip), &(arp_hdr->ar_sip), sizeof(uint32_t));
+  desplazamiento += sizeof(unsigned char);
+  
+  /*ar_sip*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(uint32_t));
+  desplazamiento += sizeof(uint32_t);
+  
+  /*ar_tha*/
   memcpy(
-    &(arp_hdr->ar_tha[ETHER_ADDR_LEN]), 
-    &(arp_hdr->ar_tha[ETHER_ADDR_LEN]), 
+    arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento,
     sizeof(unsigned char) * ETHER_ADDR_LEN
   );
-  memcpy(&(arp_hdr->ar_tip), &(arp_hdr->ar_tip), sizeof(uint32_t));
+  desplazamiento += sizeof(unsigned char) * ETHER_ADDR_LEN;
+  
+  /*ar_tip*/
+  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(uint32_t));
+  desplazamiento += sizeof(uint32_t);
 
   return arp_hdr;
 }
 
+void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_packet* paquete_esperando, struct sr_instance* sr){
+  struct sr_ethernet_hdr * paquete_ethernet = (struct sr_ethernet_hdr *) paquete_esperando->buf;
+  memcpy(paquete_ethernet, MAC_destino, sizeof(unsigned char) * ETHER_ADDR_LEN);   
+  uint8_t *buf = paquete_esperando->buf;
+  unsigned int len = paquete_esperando->len;
+  const char* iface = paquete_esperando->iface;
+  sr_send_packet(sr, buf, len, iface);
+}
+
+
 /* add or update sender to ARP cache */
-void add_or_update_ARP_cache(struct sr_arpcache *cache, uint32_t sip, unsigned char sha) {
-  struct sr_arpreq *arp_req = sr_arpcache_insert(cache, sha, sip);
+void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, struct sr_instance *sr) {
+  struct sr_arpcache cache = sr->cache;
+  struct sr_arpreq *arp_req = sr_arpcache_insert(&cache, MAC_destino, source_ip);
+  if (arp_req != NULL){
+    struct sr_packet* paquetes_esperando = arp_req->packets;
+    while (paquetes_esperando != NULL){
+      enviar_paquete_esperando_por_MAC(MAC_destino, paquetes_esperando, sr);
+      paquetes_esperando = paquetes_esperando->next;          
+    }
+    sr_arpreq_destroy(&cache, arp_req);      
+  }  
+}
+
+/*
+ * Chequear que la mac destino del paquete ARP sea una de mis interfaces, en particular
+ * por la MAC que me llego definidas en sr O la MAC de broadcast
+int is_for_my_interfaces(struct sr_instances *sr, uint8_t *packet) {
+  struct sr_if* my_interfaces = sr->if_list;
+  
+  while (my_interfaces != NULL) {
+    if (
+  }
+}
+*/
+
+void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet) {
+  /* arp_request */
+  struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) packet;
+  uint32_t interface_ip = 0;
+  struct sr_if* interfaces = sr->if_list;
+  int found_ip = 0;
+  while (interfaces != NULL && found_ip == 0) {
+    if (interfaces->addr == interface) {
+      interface_ip = interfaces->ip;
+      found_ip = 1;
+    }
+  }
+  if (interface_ip == arp_hdr->ar_tip) {
+    /* la request pregunta por mi ip */
+  }
+}
+
+void handle_arp_reply() {
+  /* arp_reply */
 }
 
 void sr_handle_arp_packet(struct sr_instance *sr,
@@ -111,17 +187,25 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   sr_arp_hdr_t* arp_hdr = get_arp_header(packet);
 
   /* add or update sender to ARP cache*/
-  // actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
-  // en la cache arp
-  add_or_update_ARP_cache(sr->cache, arp_hdr->ar_sip, arp_hdr->ar_sha);
+  /* actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
+   en la cache arp*/
+  add_or_update_ARP_cache(arp_hdr->ar_sip, arp_hdr->ar_sha, sr);
 
   /* check if the ARP packet is for one of my interfaces. */
-
+  /* is_for_my_interfaces(sr, packet); */
+  
   /* check if it is a request or reply*/
+  unsigned short op = arp_hdr->ar_op;
 
   /* if it is a request, construct and send an ARP reply*/
+  if (op == arp_op_request) {
+    handle_arp_request(sr, interface, packet);
+  }   
 
   /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
+  else if (op == arp_op_reply) {
+    handle_arp_reply();
+  }
 }
 
 void sr_handle_ip_packet(struct sr_instance *sr,
