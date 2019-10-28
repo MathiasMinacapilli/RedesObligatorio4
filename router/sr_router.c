@@ -55,7 +55,13 @@ void sr_init(struct sr_instance* sr)
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
 void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
-
+  /*tengo que mandar un paquete arp con la ip que me pasan pa todas las interfaces preguntando, menos la que me llego??*/
+  struct sr_if* interfaces_list = sr->if_list;
+  while (interfaces_list != NULL){
+    uint8_t* arp_request = create_arp_packet(sr, interfaces_list->addr, "FF-FF-FF-FF-FF", interfaces_list->ip, ip, arp_op_request);
+    sr_send_packet(sr, arp_request, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interfaces_list->name);
+    interfaces_list = interfaces_list->next;
+  }
 }
 
 /* Send an ICMP error. */
