@@ -52,16 +52,51 @@ void sr_init(struct sr_instance* sr)
 
 } /* -- sr_init -- */
 
+uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, unsigned char* destiny_MAC, uint32_t source_IP, uint32_t destiny_IP, unsigned short oper){
+    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+    uint8_t *ethPacket = malloc(ethPacketLen);
+    sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
+    memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
+    memcpy(ethHdr->ether_shost, source_MAC, sizeof(uint8_t) * ETHER_ADDR_LEN);
+    ethHdr->ether_type = htons(ethertype_arp);
+    sr_arp_hdr_t *arpHdr = (sr_arp_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
+    arpHdr->ar_hrd = htons(1);
+    arpHdr->ar_pro = htons(2048);
+    arpHdr->ar_hln = 6;
+    arpHdr->ar_pln = 4;
+    arpHdr->ar_op = htons(oper);
+    memcpy(arpHdr->ar_sha, source_MAC, ETHER_ADDR_LEN);
+    memcpy(arpHdr->ar_tha, destiny_MAC, ETHER_ADDR_LEN);
+    arpHdr->ar_sip = source_IP;
+    arpHdr->ar_tip = destiny_IP;
+    return ethPacket;
+}
+
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
 void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
-  /*tengo que mandar un paquete arp con la ip que me pasan pa todas las interfaces preguntando, menos la que me llego??*/
-  struct sr_if* interfaces_list = sr->if_list;
-  while (interfaces_list != NULL){
-    uint8_t* arp_request = create_arp_packet(sr, interfaces_list->addr, "FF-FF-FF-FF-FF", interfaces_list->ip, ip, arp_op_request);
-    sr_send_packet(sr, arp_request, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interfaces_list->name);
-    interfaces_list = interfaces_list->next;
-  }
+
+  /*Consultar cual es la if de salida [out_interdace] respecto a la routing table*/
+  struct sr_rt* iter_forwarding_table = sr->routing_table;
+    uint32_t maxMask = 0x00000000; /*o 0x0*, es decir, la mask menos restrictiva posible*/
+    char* out_interface;
+    while(iter_forwarding_table != NULL){
+      uint32_t destination = iter_forwarding_table->dest.s_addr;
+      uint32_t mask = iter_forwarding_table->mask.s_addr;
+      if((mask > maxMask) && ((ip & mask) ^ destination) == 0){ /*el operador xor, si dos bit son iguales da 0*/
+          out_interface = iter_forwarding_table->interface;
+          maxMask = mask;
+      } 
+    iter_forwarding_table = iter_forwarding_table->next;
+    }
+
+    struct sr_if* instance_of_out_interface = sr_get_interface(sr, out_interface);
+  /*Mandar la request por la if obtenida de la tabla*/
+
+  uint8_t * broadcast = generate_ethernet_addr(0xFF);
+  uint8_t* arp_request = create_arp_packet(sr, instance_of_out_interface->addr, broadcast, instance_of_out_interface->ip, ip, arp_op_request);
+  sr_send_packet(sr, arp_request, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), instance_of_out_interface->name);
+
 }
 
 /* Send an ICMP error. */
@@ -161,25 +196,6 @@ int is_for_my_interfaces(struct sr_instances *sr, uint8_t *packet) {
 }
 */
 
-uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, unsigned char* destiny_MAC, uint32_t source_IP, uint32_t destiny_IP, unsigned short oper){
-    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
-    uint8_t *ethPacket = malloc(ethPacketLen);
-    sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
-    memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
-    memcpy(ethHdr->ether_shost, source_MAC, sizeof(uint8_t) * ETHER_ADDR_LEN);
-    ethHdr->ether_type = htons(ethertype_arp);
-    sr_arp_hdr_t *arpHdr = (sr_arp_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
-    arpHdr->ar_hrd = htons(1);
-    arpHdr->ar_pro = htons(2048);
-    arpHdr->ar_hln = 6;
-    arpHdr->ar_pln = 4;
-    arpHdr->ar_op = htons(oper);
-    memcpy(arpHdr->ar_sha, source_MAC, ETHER_ADDR_LEN);
-    memcpy(arpHdr->ar_tha, destiny_MAC, ETHER_ADDR_LEN);
-    arpHdr->ar_sip = source_IP;
-    arpHdr->ar_tip = destiny_IP;
-    return ethPacket;
-}
 
 void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet) {
   /* arp_request */
