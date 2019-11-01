@@ -72,6 +72,7 @@ uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, un
     return ethPacket;
 }
 
+
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
 void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
@@ -255,20 +256,82 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   add_or_update_ARP_cache(arp_hdr->ar_sip, arp_hdr->ar_sha, sr);
 
   /* check if the ARP packet is for one of my interfaces. */
-  is_for_my_interfaces(sr, packet, interface);
-  
-  /* check if it is a request or reply*/
-  unsigned short op = arp_hdr->ar_op;
+  int is_for_me = is_for_my_interfaces(sr, packet, interface);
+  if(is_for_me > 0){
+      /* check if it is a request or reply*/
+    unsigned short op = arp_hdr->ar_op;
 
-  /* if it is a request, construct and send an ARP reply*/
-  if (op == arp_op_request) {
-    handle_arp_request(sr, interface, packet);
-  }   
+    /* if it is a request, construct and send an ARP reply*/
+    if (op == arp_op_request) {
+      handle_arp_request(sr, interface, packet);
+    }   
 
-  /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
-  else if (op == arp_op_reply) {
-    handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
+    /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
+    else if (op == arp_op_reply) {
+      handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
+    }
   }
+    free(arp_hdr);
+}
+
+
+sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
+  sr_ip_hdr_t *ip_hdr_from_packet = (sr_ip_hdr_t *) packet;
+  sr_ip_hdr_t *ip_hdr = malloc(sizeof(sr_ip_hdr_t));
+  size_t desplazamiento = 0;
+
+  /*Copio la memoria del paquete a mi header nuevo casteado*/
+  
+  /*ip_tos*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
+  desplazamiento += sizeof(uint8_t);
+
+    /*ip_len*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
+  desplazamiento += sizeof(uint16_t);
+
+      /*ip_id*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
+  desplazamiento += sizeof(uint16_t);
+
+      /*ip_off*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
+  desplazamiento += sizeof(uint16_t);
+
+      /*ip_ttl*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
+  desplazamiento += sizeof(uint8_t);
+
+      /*ip_p*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
+  desplazamiento += sizeof(uint8_t);
+
+      /*ip_sum*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
+  desplazamiento += sizeof(uint16_t);
+
+      /*ip_src*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint32_t));  
+  desplazamiento += sizeof(uint32_t);
+
+        /*ip_dst*/
+  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint32_t));  
+  desplazamiento += sizeof(uint32_t);
+
+  return ip_hdr; 
+}
+
+int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
+  struct sr_if * interface_instance = sr_get_interface(sr , interface);
+  uint32_t interface_IP = interface_instance->ip;
+  if (interface_IP == ip_dst){
+    return 1;
+  }
+  return 0;
+}
+
+int is_in_table(struct sr_instance * sr, uint32_t ip_dst){
+  
 }
 
 void sr_handle_ip_packet(struct sr_instance *sr,
@@ -281,14 +344,25 @@ void sr_handle_ip_packet(struct sr_instance *sr,
 
 
 	/* Get IP header and addresses */
+  struct sr_ip_hdr* ip_hdr = get_ip_header(packet);
 
 	/* Check if packet is for me or the destination is in my routing table*/
 
-	/* If non of the above is true, send ICMP net unreachable */
+  int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
 
-	/* Else if for me, check if ICMP and act accordingly*/
+  int is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
 
-	/* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
+  if (is_for_me > 0) {
+    /* Else if for me, check if ICMP and act accordingly*/
+
+   
+  } else if (is_for_me == 0 && is_in_my_routing_table > 0) {
+    /* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
+
+  } else {
+	  /* If non of the above is true, send ICMP net unreachable */
+  }
+
 
 }
 
