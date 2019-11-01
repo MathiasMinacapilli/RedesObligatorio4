@@ -278,12 +278,3 @@ void print_hdrs(uint8_t *buf, uint32_t length) {
   }
 }
 
-int compare_macs(uint8_t * mac1, uint8_t * mac2){
-  for(int i = 0; i < 6 ; i++){
-    if (mac1[i] != mac2[i]){
-      return 0;
-    }
-  }
-  return 1;
-}
-

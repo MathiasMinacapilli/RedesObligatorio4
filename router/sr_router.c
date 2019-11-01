@@ -184,18 +184,30 @@ void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, str
   }  
 }
 
+int compare_macs(uint8_t * mac1, uint8_t * mac2){
+  int i = 0;
+  for(i = 0; i < 6 ; i++){
+    if (mac1[i] != mac2[i]){
+      return 0;
+    }
+  }
+  return 1;
+}
+
+
 /*
  * Chequear que la mac destino del paquete ARP sea una de mis interfaces, en particular
  * por la MAC que me llego definidas en sr O la MAC de broadcast*/
-int is_for_my_interfaces(uint8_t *packet, char *interface) {
+int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interface) {
   struct sr_ethernet_hdr * ethernet_packet = (struct sr_ethernet_hdr *)packet;
   uint8_t * destiny_MAC = ethernet_packet->ether_shost;
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
-    if (compare_macs(destiny_MAC, broadcast)){
+  int equals = compare_macs(destiny_MAC, broadcast);
+  if (equals == 1){
     return 1;
   }
-  sr_if * interface_instance = sr_get_interface(interface);
-  unsigned char* interface_MAC = sr_if->addr;
+  struct sr_if * interface_instance = sr_get_interface(sr , interface);
+  unsigned char* interface_MAC = interface_instance->addr;
   uint8_t * interfaz_MAC = (uint8_t *)interface_MAC;
   if (compare_macs(destiny_MAC, interfaz_MAC)) {
 	  return 1;
@@ -243,7 +255,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   add_or_update_ARP_cache(arp_hdr->ar_sip, arp_hdr->ar_sha, sr);
 
   /* check if the ARP packet is for one of my interfaces. */
-  is_for_my_interfaces(packet, interface);
+  is_for_my_interfaces(sr, packet, interface);
   
   /* check if it is a request or reply*/
   unsigned short op = arp_hdr->ar_op;
