@@ -508,11 +508,13 @@ void sr_handle_ip_packet(struct sr_instance *sr,
     /* Else if for me, check if ICMP and act accordingly*/
     if(is_ICMP(ip_hdr) > 0){
       /*manejar icmp*/
+      /*Hay que ver que el CHECKSUM este bien*/
     } else {
       /*devolver icmp port unreachable*/
     }
    
   } else if (is_for_me == 0 && is_in_my_routing_table != NULL) {
+    /*Revisar CHECKSUM, si ta mal ripear el el paquete*/
     /* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
     /*check ttl*/
     if(is_TTL_expired(ip_hdr) > 0){
