@@ -24,6 +24,8 @@
 #include "sr_utils.h"
 #include "sr_arpcache.h"
 
+#define DEBUG 1
+
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
  * Scope:  Global
@@ -53,6 +55,11 @@ void sr_init(struct sr_instance* sr)
 } /* -- sr_init -- */
 
 uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, unsigned char* destiny_MAC, uint32_t source_IP, uint32_t destiny_IP, unsigned short oper){
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: Creando arp packet");
+    }
+
     int ethPacketLen = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
     uint8_t *ethPacket = malloc(ethPacketLen);
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
@@ -69,6 +76,11 @@ uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, un
     memcpy(arpHdr->ar_tha, destiny_MAC, ETHER_ADDR_LEN);
     arpHdr->ar_sip = source_IP;
     arpHdr->ar_tip = destiny_IP;
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: Terminado de crear arp packet");
+    }
+
     return ethPacket;
 }
 
@@ -76,6 +88,10 @@ uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, un
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
 void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Iniciando el envio de arp request");
+  }
 
   /*Consultar cual es la if de salida [out_interdace] respecto a la routing table*/
   struct sr_rt* iter_forwarding_table = sr->routing_table;
@@ -96,6 +112,10 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
 
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
   uint8_t* arp_request = create_arp_packet(sr, instance_of_out_interface->addr, broadcast, instance_of_out_interface->ip, ip, arp_op_request);
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Enviando paquete");
+  }
   sr_send_packet(sr, arp_request, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), instance_of_out_interface->name);
 
 }
@@ -162,6 +182,11 @@ sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
 }
 
 void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_packet* paquete_esperando, struct sr_instance* sr){
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Comienzo de envio de paquete esperando por mac");
+  }
+
   struct sr_ethernet_hdr * paquete_ethernet = (struct sr_ethernet_hdr *) paquete_esperando->buf;
   memcpy(paquete_ethernet, MAC_destino, sizeof(unsigned char) * ETHER_ADDR_LEN);   
   uint8_t *buf = paquete_esperando->buf;
@@ -173,6 +198,11 @@ void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_pack
 
 /* add or update sender to ARP cache */
 void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, struct sr_instance *sr) {
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Agregando o actualizando la ARP cache");
+  }
+
   struct sr_arpcache cache = sr->cache;
   struct sr_arpreq *arp_req = sr_arpcache_insert(&cache, MAC_destino, source_ip);
   if (arp_req != NULL){
@@ -200,6 +230,11 @@ int compare_macs(uint8_t * mac1, uint8_t * mac2){
  * Chequear que la mac destino del paquete ARP sea una de mis interfaces, en particular
  * por la MAC que me llego definidas en sr O la MAC de broadcast*/
 int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interface) {
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Chequeando que el paquete recibido sea para una de mis interfaces...");
+  }
+
   struct sr_ethernet_hdr * ethernet_packet = (struct sr_ethernet_hdr *)packet;
   uint8_t * destiny_MAC = ethernet_packet->ether_shost;
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
@@ -220,14 +255,25 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
 
 void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet) {
   /* arp_request */
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Manejando la request arp...");
+  }
+
   struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) packet;
   uint32_t requested_ip = arp_hdr->ar_tip;
   struct sr_if* requested_interface = sr_get_interface_given_ip(sr, requested_ip);
   if (requested_interface == 0){
       /*descarto el paquete*/
+      if (DEBUG == 1) {
+        fprintf(sr->logfile, "DEBUG: La request recibida NO es para mi, descartando paquete...");
+      }
       return;
   } else {
       /*crea respuesta arp*/
+      if (DEBUG == 1) {
+        fprintf(sr->logfile, "DEBUG: La request recibida es para mi. Creando y enviando respuesta a la request...");
+      }
       uint8_t * arp_packet = create_arp_packet(sr, requested_interface->addr, arp_hdr->ar_sha, requested_interface->ip, arp_hdr->ar_sip, arp_op_reply);
       sr_send_packet(sr, arp_packet, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), requested_interface->name);
   }
@@ -236,6 +282,9 @@ void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet
 
 void handle_arp_reply(struct sr_instance *sr, unsigned char* MAC_destino, uint32_t source_ip) {
   /* arp_reply */
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Manejando respuesta de consulta arp...");
+  }
   add_or_update_ARP_cache(source_ip, MAC_destino, sr);
 }
 
@@ -248,6 +297,9 @@ void sr_handle_arp_packet(struct sr_instance *sr,
         sr_ethernet_hdr_t *eHdr) {
 
   /* Get ARP header and addresses */
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Obteniendo el header arp...");
+  }
   sr_arp_hdr_t* arp_hdr = get_arp_header(packet);
 
   /* add or update sender to ARP cache*/
@@ -258,6 +310,9 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   /* check if the ARP packet is for one of my interfaces. */
   int is_for_me = is_for_my_interfaces(sr, packet, interface);
   if(is_for_me > 0){
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: El paquete arp es para mi, procesando el paquete...");
+    }
       /* check if it is a request or reply*/
     unsigned short op = arp_hdr->ar_op;
 
@@ -322,15 +377,29 @@ sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
 }
 
 int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Chequeando que el paquete IP sea para mi...");
+  }
   struct sr_if * interface_instance = sr_get_interface(sr , interface);
   uint32_t interface_IP = interface_instance->ip;
   if (interface_IP == ip_dst){
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: El paquete IP es para mi...");
+    }
     return 1;
+  }
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: El paquete IP NO es para mi...");
   }
   return 0;
 }
 
 char* is_in_table(struct sr_instance * sr, uint32_t ip_dst){
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Chequeando que el destino este en mi forwarding table...");
+  }
+
   struct sr_rt* iter_forwarding_table = sr->routing_table;
   uint32_t maxMask = 0x00000000; /*o 0x0*, es decir, la mask menos restrictiva posible*/
   char* out_interface = NULL;
@@ -371,6 +440,11 @@ void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
 
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
  unsigned char* destiny_MAC, struct sr_ip_hdr * ip_header){
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: Creando paquete IP...");
+    }
+
     int ethPacketLen = sizeof(sr_ethernet_hdr_t) + ip_header->ip_len;
     uint8_t *ethPacket = malloc(ethPacketLen);
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
@@ -383,6 +457,11 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
 }
 
 void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* interface, unsigned int len){
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Manejando ARP e IP...");
+  }
+
   struct sr_arpcache* arp_cache = &sr->cache;
   struct sr_arpentry* entry_arp = sr_arpcache_lookup(arp_cache, ip_hdr->ip_dst);
   struct sr_if* interface_instance = sr_get_interface(sr, interface);
@@ -406,11 +485,21 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
 
 void create_icmp_packet(struct sr_instance * sr, char* out_interface,
   uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
+
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Creando paquete ICMP...");
+  }
+
   uint8_t type_3 = 0x03;
   struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
   uint32_t source_IP = out_interface_instance->ip; 
   unsigned char * source_MAC = out_interface_instance->addr;
   if(type_3 == icmp_type){
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: ICMP de tipo 3...");
+    }
+
     /*hacer tipo 3*/
     /*hacer el ip_hdr y pasarselo a la funcion de hacer el paquete ip, icmp va adentro 
     de ip como payload*/
@@ -453,6 +542,11 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
 
 
   } else {
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: ICMP tipo NO 3...");
+    }
+
     /*hacer el que corresponda*/
     int ipPacketLen = sizeof(sr_icmp_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
     uint8_t * ipPacket = malloc(ipPacketLen);
@@ -493,20 +587,35 @@ void sr_handle_ip_packet(struct sr_instance *sr,
         char *interface /* lent */,
         sr_ethernet_hdr_t *eHdr) {
 
+  if (DEBUG == 1) {
+    fprintf(sr->logfile, "DEBUG: Procesando el paquete IP...");
+  }
 
 	/* Get IP header and addresses */
   struct sr_ip_hdr* ip_hdr = get_ip_header(packet);
 
 	/* Check if packet is for me or the destination is in my routing table*/
   if (ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t)) == ip_hdr->ip_sum){
-      int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
+
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: Paquete IP sano, continua procesamiento...");
+    }
+    int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
     /*NO HABRIA QUE PREGUNTAR POR LA MAC TAMBIEN? pa que me pasan el header_ethernet sino?*/
 
     char* is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
 
     if (is_for_me > 0) {
+      if (DEBUG == 1) {
+        fprintf(sr->logfile, "DEBUG: El paquete es para mi");
+      }
       /* Else if for me, check if ICMP and act accordingly*/
       if(is_ICMP(ip_hdr) > 0){
+
+        if (DEBUG == 1) {
+          fprintf(sr->logfile, "DEBUG: El paquete es ICMP...");
+        }
+
         /*manejar icmp*/
         struct sr_icmp_hdr * icmp_hdr = (struct sr_icmp_hdr *) ip_hdr + sizeof(sr_ip_hdr_t);
         if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){
@@ -517,30 +626,53 @@ void sr_handle_ip_packet(struct sr_instance *sr,
           /*discard*/
         }
       } else {
+
+        if (DEBUG == 1) {
+          fprintf(sr->logfile, "DEBUG: El paquete IP tiene payload NO ICMP, se retorna ICMP port unreachable...");
+        }
+
         /*devolver icmp port unreachable*/
         create_icmp_packet(sr, interface, 0x03, 0x03, ip_hdr, eHdr->ether_shost);
 
       }
     
     } else if (is_for_me == 0 && is_in_my_routing_table != NULL) {
+      if (DEBUG == 1) {
+        fprintf(sr->logfile, "DEBUG: El paquete no es para mi pero esta en mi tabla de forwarding...");
+      }
       /* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
       /*check ttl*/
       if(is_TTL_expired(ip_hdr) > 0){
+        if (DEBUG == 1) {
+          fprintf(sr->logfile, "DEBUG: TTL expirado, enviando mensaje de error...");
+        }
         /*mandar IMCP tipo 11, return;*/
         create_icmp_packet(sr, interface, 0x0B, 0x00, ip_hdr, eHdr->ether_shost);
 
       } else {
+        if (DEBUG == 1) {
+          fprintf(sr->logfile, "DEBUG: TTL NO expirado...");
+        }
         /*Decrementar TTL, calcular checksum, ver si MAC esta en ARP cache, 
         sino preguntar y esperar. Cuando tengo MAC, hacer trama ethernet y reenviar*/
+        if (DEBUG == 1) {
+          fprintf(sr->logfile, "DEBUG: Decrementando TTL y re calculando checksum...");
+        }
         decrement_TTL_and_rechecksum(ip_hdr);
         handle_arp_and_ip(sr, ip_hdr, is_in_my_routing_table, len);
       }
     } else {
       /* If non of the above is true, send ICMP net unreachable */
+      if (DEBUG == 1) {
+        fprintf(sr->logfile, "DEBUG: Creando ICMP net unreachable...");
+      }
       create_icmp_packet(sr, interface, 0x03, 0x00, ip_hdr, eHdr->ether_shost);
     }
 
   } else {  /*Si el checksum de IP no me da igual que lo que viene en el paquete*/
+    if (DEBUG == 1) {
+      fprintf(sr->logfile, "DEBUG: Descartando paquete...");
+    }
     /*deberia descartar el paquete*/
   } 
 }
