@@ -407,29 +407,65 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
 void create_icmp_packet(struct sr_instance * sr, char* out_interface,
   uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
   uint8_t type_3 = 0x03;
+  struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
+  uint32_t source_IP = out_interface_instance->ip; 
+  unsigned char * source_MAC = out_interface_instance->addr;
   if(type_3 == icmp_type){
     /*hacer tipo 3*/
     /*hacer el ip_hdr y pasarselo a la funcion de hacer el paquete ip, icmp va adentro 
     de ip como payload*/
     int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
     uint8_t * ipPacket = malloc(ipPacketLen);
-    /*lo mismo que abajo pero com icmp_t3*/
+    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
+
+    sr_icmp_t3_hdr_t * icmp3Hdr = (struct sr_icmp_t3_hdr *) ipHdr + sizeof(sr_ip_hdr_t);
+    icmp3Hdr->icmp_type = 0x03;
+    icmp3Hdr->icmp_code = icmp_code;
+    icmp3Hdr->unused = 0x00;
+
+    /*que mierda es esto*/
+    icmp3Hdr->next_mtu = 0x00;
+    
+    /*icmp3Hdr->data = memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);*/
+    memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);
+
+    /*Esto esta en el RFC de ICMP que pa calcular el checksum tiene que ser 0*/
+    icmp3Hdr->icmp_sum = 0x00;
+    icmp3Hdr->icmp_sum = icmp3_cksum(icmp3Hdr, sizeof(sr_icmp_t3_hdr_t));
+
+
+    ipHdr->ip_tos = 0x00;
+    ipHdr->ip_len = ipPacketLen;
+    ipHdr->ip_id = 0x00;
+    ipHdr->ip_off = htons(IP_DF);
+    ipHdr->ip_ttl = 0x30;
+    ipHdr->ip_p = 0x01;   
+    ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
+    ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
+
+    ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+
+    uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
+    sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
+    free(ethPacket);
+    free(ipPacket);
+
+
 
   } else {
     /*hacer el que corresponda*/
     int ipPacketLen = sizeof(sr_icmp_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
     uint8_t * ipPacket = malloc(ipPacketLen);
     sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
-    struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
-    uint32_t source_IP = out_interface_instance->ip; 
-    unsigned char * source_MAC = out_interface_instance->addr;
-
 
     /*Aca irian los htons y eso ni idea*/
 
     sr_icmp_hdr_t * icmpHdr = (struct sr_icmp_hdr *) ipHdr + sizeof(sr_ip_hdr_t);
     icmpHdr->icmp_type = icmp_type;
     icmpHdr->icmp_code = icmp_code;
+
+    /*Esto esta en el RFC de ICMP que pa calcular el checksum tiene que ser 0*/
+    icmpHdr->icmp_sum = 0x00;
     icmpHdr->icmp_sum = icmp_cksum(icmpHdr, sizeof(sr_icmp_hdr_t));
 
     ipHdr->ip_tos = 0x00;
