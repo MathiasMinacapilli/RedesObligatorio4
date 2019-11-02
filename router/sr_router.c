@@ -498,38 +498,51 @@ void sr_handle_ip_packet(struct sr_instance *sr,
   struct sr_ip_hdr* ip_hdr = get_ip_header(packet);
 
 	/* Check if packet is for me or the destination is in my routing table*/
+  if (ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t)) == ip_hdr->ip_sum){
+      int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
+    /*NO HABRIA QUE PREGUNTAR POR LA MAC TAMBIEN? pa que me pasan el header_ethernet sino?*/
 
-  int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
-  /*NO HABRIA QUE PREGUNTAR POR LA MAC TAMBIEN? pa que me pasan el header_ethernet sino?*/
+    char* is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
 
-  char* is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
+    if (is_for_me > 0) {
+      /* Else if for me, check if ICMP and act accordingly*/
+      if(is_ICMP(ip_hdr) > 0){
+        /*manejar icmp*/
+        struct sr_icmp_hdr * icmp_hdr = (struct sr_icmp_hdr *) ip_hdr + sizeof(sr_ip_hdr_t);
+        if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){
+          if(icmp_hdr->icmp_type == 0x08){
+            create_icmp_packet(sr, interface, 0x00, 0x00, ip_hdr, eHdr->ether_shost);
+          }
+        }  else {
+          /*discard*/
+        }
+      } else {
+        /*devolver icmp port unreachable*/
+        create_icmp_packet(sr, interface, 0x03, 0x03, ip_hdr, eHdr->ether_shost);
 
-  if (is_for_me > 0) {
-    /* Else if for me, check if ICMP and act accordingly*/
-    if(is_ICMP(ip_hdr) > 0){
-      /*manejar icmp*/
-      /*Hay que ver que el CHECKSUM este bien*/
+      }
+    
+    } else if (is_for_me == 0 && is_in_my_routing_table != NULL) {
+      /* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
+      /*check ttl*/
+      if(is_TTL_expired(ip_hdr) > 0){
+        /*mandar IMCP tipo 11, return;*/
+        create_icmp_packet(sr, interface, 0x0B, 0x00, ip_hdr, eHdr->ether_shost);
+
+      } else {
+        /*Decrementar TTL, calcular checksum, ver si MAC esta en ARP cache, 
+        sino preguntar y esperar. Cuando tengo MAC, hacer trama ethernet y reenviar*/
+        decrement_TTL_and_rechecksum(ip_hdr);
+        handle_arp_and_ip(sr, ip_hdr, is_in_my_routing_table, len);
+      }
     } else {
-      /*devolver icmp port unreachable*/
+      /* If non of the above is true, send ICMP net unreachable */
+      create_icmp_packet(sr, interface, 0x03, 0x00, ip_hdr, eHdr->ether_shost);
     }
-   
-  } else if (is_for_me == 0 && is_in_my_routing_table != NULL) {
-    /*Revisar CHECKSUM, si ta mal ripear el el paquete*/
-    /* Else, check TTL, ARP and forward if corresponds (may need an ARP request and wait for the reply) */
-    /*check ttl*/
-    if(is_TTL_expired(ip_hdr) > 0){
-      /*mandar IMCP tipo 11, return;*/
-    } else {
-      /*Decrementar TTL, calcular checksum, ver si MAC esta en ARP cache, 
-      sino preguntar y esperar. Cuando tengo MAC, hacer trama ethernet y reenviar*/
-      decrement_TTL_and_rechecksum(ip_hdr);
-      handle_arp_and_ip(sr, ip_hdr, is_in_my_routing_table, len);
-    }
-  } else {
-	  /* If non of the above is true, send ICMP net unreachable */
-  }
 
-
+  } else {  /*Si el checksum de IP no me da igual que lo que viene en el paquete*/
+    /*deberia descartar el paquete*/
+  } 
 }
 
 /*---------------------------------------------------------------------
