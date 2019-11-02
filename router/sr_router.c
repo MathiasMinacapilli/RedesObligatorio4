@@ -370,15 +370,15 @@ void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
 }
 
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
- unsigned char* destiny_MAC, struct sr_ip_hdr * ip_header, unsigned int len){
-    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t);
+ unsigned char* destiny_MAC, struct sr_ip_hdr * ip_header){
+    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + ip_header->ip_len;
     uint8_t *ethPacket = malloc(ethPacketLen);
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
     memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
     memcpy(ethHdr->ether_shost, source_MAC, sizeof(uint8_t) * ETHER_ADDR_LEN);
     ethHdr->ether_type = htons(ethertype_ip);
     sr_ip_hdr_t *ipHdr = (sr_ip_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
-    memcpy(ipHdr, ip_header, len);
+    memcpy(ipHdr, ip_header, ip_header->ip_len);
     return ethPacket;
 }
 
@@ -392,16 +392,61 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     /*el destiny mac lo pongo null, porque no la se todavia, cuando alguien lo averigua
     edita el paquete y lo manda */
     /*el len que llega es de toda la trama ethernet, le saco el header ethernet*/
-    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr, len - sizeof(sr_ethernet_hdr_t));
+    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr);
     sr_arpcache_queuereq(arp_cache, ip_hdr->ip_dst, ethPacket,len, interface);
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
     /*Si tengo la direccion mac, creo la trama ethernet y la mando*/
-    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, entry_arp->mac, ip_hdr, len - sizeof(sr_ethernet_hdr_t));
+    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, entry_arp->mac, ip_hdr);
     sr_send_packet(sr, ethPacket, len, interface);
     free(ethPacket);
   }
   free(entry_arp);
+}
+
+void create_icmp_packet(struct sr_instance * sr, char* out_interface,
+  uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
+  uint8_t type_3 = 0x03;
+  if(type_3 == icmp_type){
+    /*hacer tipo 3*/
+    /*hacer el ip_hdr y pasarselo a la funcion de hacer el paquete ip, icmp va adentro 
+    de ip como payload*/
+    int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
+    uint8_t * ipPacket = malloc(ipPacketLen);
+    /*lo mismo que abajo pero com icmp_t3*/
+
+  } else {
+    /*hacer el que corresponda*/
+    int ipPacketLen = sizeof(sr_icmp_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
+    uint8_t * ipPacket = malloc(ipPacketLen);
+    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
+    struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
+    uint32_t source_IP = out_interface_instance->ip; 
+    unsigned char * source_MAC = out_interface_instance->addr;
+
+
+    /*Aca irian los htons y eso ni idea*/
+
+    sr_icmp_hdr_t * icmpHdr = (struct sr_icmp_hdr *) ipHdr + sizeof(sr_ip_hdr_t);
+    icmpHdr->icmp_type = icmp_type;
+    icmpHdr->icmp_code = icmp_code;
+    icmpHdr->icmp_sum = icmp_cksum(icmpHdr, sizeof(sr_icmp_hdr_t));
+
+    ipHdr->ip_tos = 0x00;
+    ipHdr->ip_len = ipPacketLen;
+    ipHdr->ip_id = 0x00;
+    ipHdr->ip_off = htons(IP_DF);
+    ipHdr->ip_ttl = 0x30;
+    ipHdr->ip_p = 0x01;   
+    ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
+    ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
+    ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+
+    uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
+    sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
+    free(ethPacket);
+    free(ipPacket);
+  }
 }
 
 void sr_handle_ip_packet(struct sr_instance *sr,
