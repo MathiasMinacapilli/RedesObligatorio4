@@ -236,8 +236,15 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
   }
 
   struct sr_ethernet_hdr * ethernet_packet = (struct sr_ethernet_hdr *)packet;
-  uint8_t * destiny_MAC = ethernet_packet->ether_shost;
+  uint8_t * destiny_MAC = ethernet_packet->ether_dhost;
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
+
+  printf("ATENCIAAAAN, se viene la destiny mac:\n");
+  print_addr_eth(destiny_MAC);
+  printf("\n");
+
+
+
   int equals = compare_macs(destiny_MAC, broadcast);
   if (equals == 1){
     return 1;
@@ -245,6 +252,11 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
   struct sr_if * interface_instance = sr_get_interface(sr , interface);
   unsigned char* interface_MAC = interface_instance->addr;
   uint8_t * interfaz_MAC = (uint8_t *)interface_MAC;
+
+  printf("ATENCIAAAAN, se viene la interfaz por la que llega:\n");
+  print_addr_eth(interfaz_MAC);
+  printf("\n");
+
   if (compare_macs(destiny_MAC, interfaz_MAC)) {
 	  return 1;
   }
@@ -318,14 +330,28 @@ void sr_handle_arp_packet(struct sr_instance *sr,
 
     /* if it is a request, construct and send an ARP reply*/
     if (op == arp_op_request) {
+      if (DEBUG == 1) {
+        printf("DEBUG: Es un ARP request...\n");
+      }
       handle_arp_request(sr, interface, packet);
     }   
 
     /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
     else if (op == arp_op_reply) {
+      if (DEBUG == 1) {
+        printf("DEBUG: Es un ARP reply...\n");
+      }
       handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
     }
   }
+    /*
+    unsigned short opi = arp_hdr->ar_op;
+    if (opi == 0x0000) {
+      if (DEBUG == 1) {
+        printf("whaaaaaaaaaattttt EL VALOR DE OPERACION ARP ES 0?");
+      }
+    }*/
+      printf("LIBERANDO ARP HEADER...\n");
     free(arp_hdr);
 }
 
