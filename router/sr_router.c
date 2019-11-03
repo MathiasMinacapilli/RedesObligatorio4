@@ -308,47 +308,10 @@ void sr_handle_arp_packet(struct sr_instance *sr,
 
 
 sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
-  sr_ip_hdr_t *ip_hdr_from_packet = (sr_ip_hdr_t *) packet;
+  sr_ip_hdr_t *ip_hdr_from_packet = (sr_ip_hdr_t *) (packet);
   sr_ip_hdr_t *ip_hdr = malloc(sizeof(sr_ip_hdr_t));
-  size_t desplazamiento = 0;
-
-  /*Copio la memoria del paquete a mi header nuevo casteado*/
   
-  /*ip_tos*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
-  desplazamiento += sizeof(uint8_t);
-
-    /*ip_len*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
-  desplazamiento += sizeof(uint16_t);
-
-      /*ip_id*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
-  desplazamiento += sizeof(uint16_t);
-
-      /*ip_off*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
-  desplazamiento += sizeof(uint16_t);
-
-      /*ip_ttl*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
-  desplazamiento += sizeof(uint8_t);
-
-      /*ip_p*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint8_t));  
-  desplazamiento += sizeof(uint8_t);
-
-      /*ip_sum*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint16_t));  
-  desplazamiento += sizeof(uint16_t);
-
-      /*ip_src*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint32_t));  
-  desplazamiento += sizeof(uint32_t);
-
-        /*ip_dst*/
-  memcpy(ip_hdr+desplazamiento, ip_hdr_from_packet+desplazamiento, sizeof(uint32_t));  
-  desplazamiento += sizeof(uint32_t);
+  memcpy(ip_hdr, ip_hdr_from_packet, sizeof(sr_ip_hdr_t));
 
   return ip_hdr; 
 }
@@ -359,7 +322,7 @@ int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
   }
   struct sr_if * interface_instance = sr_get_interface(sr , interface);
   uint32_t interface_IP = interface_instance->ip;
-  if (interface_IP == ip_dst){
+  if (interface_IP == ip_dst) {
     if (DEBUG == 1) {
       printf("DEBUG: El paquete IP es para mi...\n");
     }
@@ -569,10 +532,14 @@ void sr_handle_ip_packet(struct sr_instance *sr,
   }
 
 	/* Get IP header and addresses */
-  struct sr_ip_hdr* ip_hdr = get_ip_header(packet);
+  int ip_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
+  struct sr_ip_hdr* ip_hdr = get_ip_header(ip_hdr_pointer);
+
+  print_hdr_ip(ip_hdr);
+  uint32_t ip_checksum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
 
 	/* Check if packet is for me or the destination is in my routing table*/
-  if (ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t)) == ip_hdr->ip_sum){
+  if (ip_checksum == ip_hdr->ip_sum) {
 
     if (DEBUG == 1) {
       printf("DEBUG: Paquete IP sano, continua procesamiento...\n");
