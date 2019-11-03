@@ -221,11 +221,12 @@ void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet
   /* arp_request */
 
   if (DEBUG == 1) {
-    printf("DEBUG: Manejando la request arp...");
+    printf("DEBUG: Manejando la request arp...\n");
   }
 
-  struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) packet;
+  struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) (packet);
   uint32_t requested_ip = arp_hdr->ar_tip;
+  
   struct sr_if* requested_interface = sr_get_interface_given_ip(sr, requested_ip);
   if (requested_interface == 0) {
       /*descarto el paquete*/
@@ -265,19 +266,20 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   if (DEBUG == 1) {
     printf("DEBUG: Obteniendo el header arp...\n");
   }
-  print_hdr_arp( packet + sizeof(sr_ethernet_hdr_t));
-  sr_arp_hdr_t* arp_hdr = get_arp_header(packet + sizeof(sr_ethernet_hdr_t));
+  int arp_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
+  print_hdr_arp(arp_hdr_pointer);
+  sr_arp_hdr_t* arp_hdr = get_arp_header(arp_hdr_pointer);
 
   print_hdr_arp((uint8_t *) (arp_hdr));
 
   /* add or update sender to ARP cache*/
   /* actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
    en la cache arp*/
-  add_or_update_ARP_cache(arp_hdr->ar_sip, arp_hdr->ar_sha, sr);
+  add_or_update_ARP_cache(ntohl(arp_hdr->ar_sip), arp_hdr->ar_sha, sr);
 
   /* check if the ARP packet is for one of my interfaces. */
   int is_for_me = is_for_my_interfaces(sr, packet, interface);
-  if(is_for_me > 0){
+  if (is_for_me > 0) {
     if (DEBUG == 1) {
       printf("DEBUG: El paquete arp es para mi, procesando el paquete...\n");
     }
@@ -289,7 +291,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: Es un ARP request...\n");
       }
-      handle_arp_request(sr, interface, packet);
+      handle_arp_request(sr, interface, arp_hdr_pointer);
     }   
 
     /* else if it is a reply, add to ARP cache if necessary and send packets waiting for that reply*/
@@ -297,7 +299,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: Es un ARP reply...\n");
       }
-      handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
+      handle_arp_reply(sr, arp_hdr->ar_sha, ntohl(arp_hdr->ar_sip));
     }
   }
       printf("LIBERANDO ARP HEADER...\n");
