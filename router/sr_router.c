@@ -131,52 +131,10 @@ void sr_send_icmp_error_packet(uint8_t type,
 }
 
 sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
-  sr_arp_hdr_t *arp_hdr_from_packet = (sr_arp_hdr_t *) packet;
+  sr_arp_hdr_t *arp_hdr_from_packet = (sr_arp_hdr_t *) (packet);
   sr_arp_hdr_t *arp_hdr = malloc(sizeof(sr_arp_hdr_t));
-  size_t desplazamiento = 0;
-
-  /*Copio la memoria del paquete a mi header nuevo casteado*/
   
-  /*ar_hrd*/
-  memcpy(arp_hdr+desplazamiento, arp_hdr_from_packet+desplazamiento, sizeof(unsigned short));  
-  desplazamiento += sizeof(unsigned short);
-  
-  /*ar_pro*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned short));
-  desplazamiento += sizeof(unsigned short);
-  
-  /*ar_hln*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned char));
-  desplazamiento += sizeof(unsigned char);
-  
-  /*ar_pln*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned char));
-  desplazamiento += sizeof(unsigned char);
-
-  /*ar_op*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(unsigned short));
-  desplazamiento += sizeof(unsigned short);
-  
-  /*ar_sha*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, 
-    sizeof(unsigned char) * ETHER_ADDR_LEN
-  );
-  desplazamiento += sizeof(unsigned char);
-  
-  /*ar_sip*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(uint32_t));
-  desplazamiento += sizeof(uint32_t);
-  
-  /*ar_tha*/
-  memcpy(
-    arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento,
-    sizeof(unsigned char) * ETHER_ADDR_LEN
-  );
-  desplazamiento += sizeof(unsigned char) * ETHER_ADDR_LEN;
-  
-  /*ar_tip*/
-  memcpy(arp_hdr + desplazamiento, arp_hdr_from_packet + desplazamiento, sizeof(uint32_t));
-  desplazamiento += sizeof(uint32_t);
+  memcpy(arp_hdr, packet, sizeof(sr_arp_hdr_t));
 
   return arp_hdr;
 }
@@ -239,9 +197,6 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
   uint8_t * destiny_MAC = ethernet_packet->ether_dhost;
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
 
-  printf("ATENCIAAAAN, se viene la destiny mac:\n");
-  print_addr_eth(destiny_MAC);
-  printf("\n");
 
 
 
@@ -253,9 +208,6 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
   unsigned char* interface_MAC = interface_instance->addr;
   uint8_t * interfaz_MAC = (uint8_t *)interface_MAC;
 
-  printf("ATENCIAAAAN, se viene la interfaz por la que llega:\n");
-  print_addr_eth(interfaz_MAC);
-  printf("\n");
 
   if (compare_macs(destiny_MAC, interfaz_MAC)) {
 	  return 1;
@@ -275,7 +227,7 @@ void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet
   struct sr_arp_hdr *arp_hdr = (struct sr_arp_hdr*) packet;
   uint32_t requested_ip = arp_hdr->ar_tip;
   struct sr_if* requested_interface = sr_get_interface_given_ip(sr, requested_ip);
-  if (requested_interface == 0){
+  if (requested_interface == 0) {
       /*descarto el paquete*/
       if (DEBUG == 1) {
         printf("DEBUG: La request recibida NO es para mi, descartando paquete...\n");
@@ -307,12 +259,16 @@ void sr_handle_arp_packet(struct sr_instance *sr,
         uint8_t *destAddr,
         char *interface /* lent */,
         sr_ethernet_hdr_t *eHdr) {
+  /* packet es un paquete ethernet */
 
   /* Get ARP header and addresses */
   if (DEBUG == 1) {
     printf("DEBUG: Obteniendo el header arp...\n");
   }
-  sr_arp_hdr_t* arp_hdr = get_arp_header(packet);
+  print_hdr_arp( packet + sizeof(sr_ethernet_hdr_t));
+  sr_arp_hdr_t* arp_hdr = get_arp_header(packet + sizeof(sr_ethernet_hdr_t));
+
+  print_hdr_arp((uint8_t *) (arp_hdr));
 
   /* add or update sender to ARP cache*/
   /* actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
@@ -326,7 +282,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       printf("DEBUG: El paquete arp es para mi, procesando el paquete...\n");
     }
       /* check if it is a request or reply*/
-    unsigned short op = arp_hdr->ar_op;
+    unsigned short op = ntohs(arp_hdr->ar_op);
 
     /* if it is a request, construct and send an ARP reply*/
     if (op == arp_op_request) {
@@ -344,13 +300,6 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip) ;
     }
   }
-    /*
-    unsigned short opi = arp_hdr->ar_op;
-    if (opi == 0x0000) {
-      if (DEBUG == 1) {
-        printf("whaaaaaaaaaattttt EL VALOR DE OPERACION ARP ES 0?");
-      }
-    }*/
       printf("LIBERANDO ARP HEADER...\n");
     free(arp_hdr);
 }
