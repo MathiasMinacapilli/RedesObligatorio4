@@ -410,7 +410,7 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     printf("ROMPI CUANDO ENTRE AL ip->pakettt6\n");
     sr_ip_hdr_t *ipHdr = (sr_ip_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
     printf("ROMPI CUANDO ENTRE AL ip->pakettt7\n");
-    memcpy(ipHdr, ip_header, ip_header->ip_len);
+    memcpy(ipHdr, ip_header, ntohs(ip_header->ip_len));
     printf("ROMPI CUANDO ENTRE AL ip->pakettt8\n");
     printf("ACA VAN LOS HEADERS, QUE PASASI VA NULL?\n");
     printf("SI EL PRINTF VA SIN EL /n IMPRIME DESPUES \n");
