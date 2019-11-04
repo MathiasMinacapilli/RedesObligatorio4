@@ -131,7 +131,6 @@ void sr_send_icmp_error_packet(uint8_t type,
 }
 
 sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
-  sr_arp_hdr_t *arp_hdr_from_packet = (sr_arp_hdr_t *) (packet);
   sr_arp_hdr_t *arp_hdr = malloc(sizeof(sr_arp_hdr_t));
   
   memcpy(arp_hdr, packet, sizeof(sr_arp_hdr_t));
@@ -266,7 +265,7 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   if (DEBUG == 1) {
     printf("DEBUG: Obteniendo el header arp...\n");
   }
-  int arp_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
+  uint8_t *arp_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
   print_hdr_arp(arp_hdr_pointer);
   sr_arp_hdr_t* arp_hdr = get_arp_header(arp_hdr_pointer);
 
@@ -373,13 +372,13 @@ int is_TTL_expired(struct sr_ip_hdr* ip_hdr){
 
 void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
   printf("PAQUETE ANTES DE RECHEKSUM\n");
-  print_hdr_ip(ip_hdr);
+  print_hdr_ip((uint8_t*)ip_hdr);
   uint8_t resta = 0x01;
   uint8_t nuevo_TTL = ip_hdr->ip_ttl - resta;
   ip_hdr->ip_ttl = nuevo_TTL;
   ip_hdr->ip_sum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
   printf("PAQUETE DESPUES\n");
-  print_hdr_ip(ip_hdr);
+  print_hdr_ip((uint8_t*)ip_hdr);
 }
 
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
@@ -416,7 +415,7 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     printf("ACA VAN LOS HEADERS, QUE PASASI VA NULL?\n");
     printf("SI EL PRINTF VA SIN EL /n IMPRIME DESPUES \n");
     print_hdr_eth(ethPacket);
-    print_hdr_ip(ipHdr);
+    print_hdr_ip((uint8_t*)ipHdr);
     return ethPacket;
 }
 
@@ -441,7 +440,6 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr);
     printf("CREE EL PAQUETE ETHERNET PA AGREGAR A LA COLAR\n");
-      fprintf(stderr, "\tlength que es: %d\n", ntohs(ip_hdr->ip_len)+sizeof(sr_ethernet_hdr_t));
       fprintf(stderr, "\tlength que paso: %d\n", len);
       fprintf(stderr, "\tdestination: ");
   print_addr_ip_int(ntohl(ip_hdr->ip_dst));
@@ -457,7 +455,7 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     sr_send_packet(sr, ethPacket, len, interface);
     free(ethPacket);
   }
-  free(entry_arp);
+  /*free(entry_arp);*/
 }
 
 void create_icmp_packet(struct sr_instance * sr, char* out_interface,
@@ -569,10 +567,10 @@ void sr_handle_ip_packet(struct sr_instance *sr,
   }
 
 	/* Get IP header and addresses */
-  int ip_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
+  uint8_t * ip_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
   struct sr_ip_hdr* ip_hdr = get_ip_header(ip_hdr_pointer);
 
-  print_hdr_ip(ip_hdr);
+  print_hdr_ip((uint8_t*)ip_hdr);
   uint32_t ip_checksum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
 
 	/* Check if packet is for me or the destination is in my routing table*/

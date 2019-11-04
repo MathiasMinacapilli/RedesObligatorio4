@@ -19,7 +19,7 @@ endif
 
 ifeq ($(OSTYPE),Linux)
 ARCH = -D_LINUX_
-SOCK = -lresolv
+SOCK = -lnsl -lresolv
 endif
 
 ifeq ($(OSTYPE),SunOS)
