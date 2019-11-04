@@ -100,12 +100,23 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
     while(iter_forwarding_table != NULL){
       uint32_t destination = iter_forwarding_table->dest.s_addr;
       uint32_t mask = iter_forwarding_table->mask.s_addr;
-      if((mask > maxMask) && ((ip & mask) ^ destination) == 0){ /*el operador xor, si dos bit son iguales da 0*/
+      printf("IP A BUSCAR\n");
+      print_addr_ip_int(ip);
+      printf("IP DE LA TABLA\n");
+      print_addr_ip_int(ntohl(destination));
+
+
+      if((mask > maxMask) && ((ip & mask) ^ ntohl(destination)) == 0){ /*el operador xor, si dos bit son iguales da 0*/
+          printf("ADENTRO DEL IF\n");
           out_interface = iter_forwarding_table->interface;
           maxMask = mask;
       } 
     iter_forwarding_table = iter_forwarding_table->next;
     }
+    printf("INTERFAZ DE SALIDAAAAA\n");
+    printf("%s", out_interface);
+    printf("\n");
+
 
     struct sr_if* instance_of_out_interface = sr_get_interface(sr, out_interface);
   /*Mandar la request por la if obtenida de la tabla*/
