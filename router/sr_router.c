@@ -372,10 +372,14 @@ int is_TTL_expired(struct sr_ip_hdr* ip_hdr){
 }
 
 void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
+  printf("PAQUETE ANTES DE RECHEKSUM\n");
+  print_hdr_ip(ip_hdr);
   uint8_t resta = 0x01;
   uint8_t nuevo_TTL = ip_hdr->ip_ttl - resta;
   ip_hdr->ip_ttl = nuevo_TTL;
   ip_hdr->ip_sum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
+  printf("PAQUETE DESPUES\n");
+  print_hdr_ip(ip_hdr);
 }
 
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
@@ -384,15 +388,35 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     if (DEBUG == 1) {
       printf("DEBUG: Creando paquete IP...\n");
     }
-
-    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + ip_header->ip_len;
+    printf("ANTES DE HACER LA ASIGNACION RANCIA ESA\n");
+    int ethPacketLen = sizeof(sr_ethernet_hdr_t) + ntohs(ip_header->ip_len);
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt1\n");
     uint8_t *ethPacket = malloc(ethPacketLen);
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt2\n");
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
-    memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
-    memcpy(ethHdr->ether_shost, source_MAC, sizeof(uint8_t) * ETHER_ADDR_LEN);
+    print_addr_eth(source_MAC);
+    
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt21321313123131321\n");
+    if(destiny_MAC != NULL){
+    
+      print_addr_eth(destiny_MAC);  
+          memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
+    }else{
+      printf("DESTINY_MAC = NULL");
+    }
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt4\n");
+    memcpy(ethHdr->ether_shost, source_MAC, ETHER_ADDR_LEN);
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt5\n");
     ethHdr->ether_type = htons(ethertype_ip);
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt6\n");
     sr_ip_hdr_t *ipHdr = (sr_ip_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt7\n");
     memcpy(ipHdr, ip_header, ip_header->ip_len);
+    printf("ROMPI CUANDO ENTRE AL ip->pakettt8\n");
+    printf("ACA VAN LOS HEADERS, QUE PASASI VA NULL?\n");
+    printf("SI EL PRINTF VA SIN EL /n IMPRIME DESPUES \n");
+    print_hdr_eth(ethPacket);
+    print_hdr_ip(ipHdr);
     return ethPacket;
 }
 
@@ -411,8 +435,21 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     /*el destiny mac lo pongo null, porque no la se todavia, cuando alguien lo averigua
     edita el paquete y lo manda */
     /*el len que llega es de toda la trama ethernet, le saco el header ethernet*/
+    printf("LA ENTRY ARP ERA NULL \n");
+    /*uint8_t * broadcast = generate_ethernet_addr(0xFF);*/
+    /*En vez de pasar NULL se puede pasar con broadcast por ejemplo, o una direccion cualqueira, 
+    sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr);
-    sr_arpcache_queuereq(arp_cache, ip_hdr->ip_dst, ethPacket,len, interface);
+    printf("CREE EL PAQUETE ETHERNET PA AGREGAR A LA COLAR\n");
+      fprintf(stderr, "\tlength que es: %d\n", ntohs(ip_hdr->ip_len)+sizeof(sr_ethernet_hdr_t));
+      fprintf(stderr, "\tlength que paso: %d\n", len);
+      fprintf(stderr, "\tdestination: ");
+  print_addr_ip_int(ntohl(ip_hdr->ip_dst));
+  fprintf(stderr, "\tdestination: ");
+  print_addr_ip_int(ip_hdr->ip_dst);
+
+    sr_arpcache_queuereq(arp_cache, ntohl(ip_hdr->ip_dst), ethPacket,len, interface);
+    printf("LO METI PA LA COLA\n");
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
     /*Si tengo la direccion mac, creo la trama ethernet y la mando*/
