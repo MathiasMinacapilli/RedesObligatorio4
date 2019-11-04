@@ -122,7 +122,7 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
   /*Mandar la request por la if obtenida de la tabla*/
 
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
-  uint8_t* arp_request = create_arp_packet(sr, instance_of_out_interface->addr, broadcast, instance_of_out_interface->ip, ip, arp_op_request);
+  uint8_t* arp_request = create_arp_packet(sr, instance_of_out_interface->addr, broadcast, instance_of_out_interface->ip, htonl(ip), arp_op_request);
 
   if (DEBUG == 1) {
     printf("DEBUG: Enviando paquete...\n");
@@ -156,7 +156,7 @@ void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_pack
   }
 
   struct sr_ethernet_hdr * paquete_ethernet = (struct sr_ethernet_hdr *) paquete_esperando->buf;
-  memcpy(paquete_ethernet, MAC_destino, sizeof(unsigned char) * ETHER_ADDR_LEN);   
+  memcpy(paquete_ethernet->ether_dhost, MAC_destino, ETHER_ADDR_LEN);   
   uint8_t *buf = paquete_esperando->buf;
   unsigned int len = paquete_esperando->len;
   const char* iface = paquete_esperando->iface;
