@@ -451,11 +451,11 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr);
     printf("CREE EL PAQUETE ETHERNET PA AGREGAR A LA COLAR\n");
-      fprintf(stderr, "\tlength que paso: %d\n", len);
-      fprintf(stderr, "\tdestination: ");
-  print_addr_ip_int(ntohl(ip_hdr->ip_dst));
-  fprintf(stderr, "\tdestination: ");
-  print_addr_ip_int(ip_hdr->ip_dst);
+    fprintf(stderr, "\tlength que paso: %d\n", len);
+    fprintf(stderr, "\tdestination: ");
+    print_addr_ip_int(ntohl(ip_hdr->ip_dst));
+    fprintf(stderr, "\tdestination: ");
+    print_addr_ip_int(ip_hdr->ip_dst);
 
     sr_arpcache_queuereq(arp_cache, ntohl(ip_hdr->ip_dst), ethPacket,len, interface);
     printf("LO METI PA LA COLA\n");
@@ -465,8 +465,9 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, entry_arp->mac, ip_hdr);
     sr_send_packet(sr, ethPacket, len, interface);
     free(ethPacket);
+    free(entry_arp);
   }
-  /*free(entry_arp);*/
+  
 }
 
 void create_icmp_packet(struct sr_instance * sr, char* out_interface,
