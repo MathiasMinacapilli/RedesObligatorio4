@@ -105,14 +105,12 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                                        char *iface)
 {
     pthread_mutex_lock(&(cache->lock));
-    printf("ROMPI1\n");
     struct sr_arpreq *req;
     for (req = cache->requests; req != NULL; req = req->next) {
         if (req->ip == ip) {
             break;
         }
     }
-    printf("ROMPI2\n");
     /* If the IP wasn't found, add it */
     if (!req) {
         req = (struct sr_arpreq *) calloc(1, sizeof(struct sr_arpreq));
@@ -120,25 +118,17 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
         req->next = cache->requests;
         cache->requests = req;
     }
-    printf("ROMPI3\n");
     /* Add the packet to the list of packets for this request */
     if (packet && packet_len && iface) {
         struct sr_packet *new_pkt = (struct sr_packet *)malloc(sizeof(struct sr_packet));
-        printf("ROMPI4\n");
-        fprintf(stderr, "\tpacket_len?????????????: %d\n", packet_len);
         new_pkt->buf = (uint8_t *)malloc(packet_len);
-        printf("rompi en el malloc?\n");
         memcpy(new_pkt->buf, packet, packet_len);
-        printf("rompi en el mcmpy\n");
         new_pkt->len = packet_len;
-        printf("ROMPI5\n");
 		new_pkt->iface = (char *)malloc(sr_IFACE_NAMELEN);
-        printf("ROMPI6\n");
         strncpy(new_pkt->iface, iface, sr_IFACE_NAMELEN);
         new_pkt->next = req->packets;
         req->packets = new_pkt;
     }
-    printf("ROMPI10\n");
     pthread_mutex_unlock(&(cache->lock));
     
     return req;

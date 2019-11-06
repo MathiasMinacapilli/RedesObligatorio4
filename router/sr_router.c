@@ -101,23 +101,13 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip2) {
     while(iter_forwarding_table != NULL){
       uint32_t destination = iter_forwarding_table->dest.s_addr;
       uint32_t mask = iter_forwarding_table->mask.s_addr;
-      printf("IP A BUSCAR\n");
-      print_addr_ip_int(ip);
-      printf("IP DE LA TABLA\n");
-      print_addr_ip_int(ntohl(destination));
-
 
       if((mask > maxMask) && ((ip & mask) ^ ntohl(destination)) == 0){ /*el operador xor, si dos bit son iguales da 0*/
-          printf("ADENTRO DEL IF\n");
           out_interface = iter_forwarding_table->interface;
           maxMask = mask;
       } 
     iter_forwarding_table = iter_forwarding_table->next;
     }
-    printf("INTERFAZ DE SALIDAAAAA\n");
-    printf("%s", out_interface);
-    printf("\n");
-
 
     struct sr_if* instance_of_out_interface = sr_get_interface(sr, out_interface);
   /*Mandar la request por la if obtenida de la tabla*/
@@ -154,25 +144,14 @@ void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_pack
 
   if (DEBUG == 1) {
     printf("DEBUG: Comienzo de envio de paquete esperando por mac...\n");
-  }
-  printf("ESTA ES LA INTERFAZ QUE SE ROMPE???\n");
-  printf(paquete_esperando->iface);
-  printf("ROMPI 1..\n");
+  }  
+  printf("%s",paquete_esperando->iface);
   struct sr_ethernet_hdr * paquete_ethernet = (struct sr_ethernet_hdr *) paquete_esperando->buf;
-  printf("ROMPI 2..\n");
   memcpy(paquete_ethernet->ether_dhost, MAC_destino, ETHER_ADDR_LEN); 
-    printf("ROMPI 6..\n");  
   uint8_t *buf = paquete_esperando->buf;
-    printf("ROMPI 7..\n");
   unsigned int len = paquete_esperando->len;
-    printf("ROMPI 8..\n");
   const char* iface = paquete_esperando->iface;
-  printf("LA INTERFAZ ES:   ");
-  printf(iface);
-  printf("\n");
-    printf("ROMPI 9..\n");
   sr_send_packet(sr, buf, len, iface);
-    printf("ROMPI 10..\n");
 }
 
 
@@ -188,17 +167,21 @@ void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, str
     struct sr_arpcache cache = sr->cache;
     struct sr_arpreq *arp_req = sr_arpcache_insert(&sr->cache, MAC_destino, source_ip);
     if (arp_req != NULL){
-      printf("EL ARP REQ != NULL\n");
+      if (DEBUG == 1) {
+        printf("DEBUG: EL ARP REQ != NULL...\n");
+      }
       struct sr_packet* paquetes_esperando = arp_req->packets;
       while (paquetes_esperando != NULL){
         enviar_paquete_esperando_por_MAC(MAC_destino, paquetes_esperando, sr);
         paquetes_esperando = paquetes_esperando->next;          
       }
-      printf("ESTOY DISTROYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n");
       sr_arpreq_destroy(&cache, arp_req);      
       }  
   } else {
-    printf("La asociacion IP-MAC ya se encuentra en la tabla\n");
+    if (DEBUG == 1) {
+      printf("DEBUG: La asociacion IP-MAC ya se encuentra en la tabla...\n");
+    }
+
     free(arp_entry);
   }
 }
@@ -332,8 +315,10 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip);
     }
   }
-      printf("LIBERANDO ARP HEADER...\n");
-     free(arp_hdr);
+  if (DEBUG == 1) {
+    printf("DEBUG: Liberando ARP header...\n");
+  }
+  free(arp_hdr);
 }
 
 
@@ -401,16 +386,21 @@ int is_TTL_expired(struct sr_ip_hdr* ip_hdr){
 }
 
 void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
-  printf("PAQUETE ANTES DE RECHEKSUM\n");
-  print_hdr_ip((uint8_t*)ip_hdr);
+  if (DEBUG == 1) {
+    printf("DEBUG: Paquete antes del re-checksum...\n");
+    print_hdr_ip((uint8_t*)ip_hdr);
+  }
   uint8_t resta = 0x01;
   uint8_t nuevo_TTL = ip_hdr->ip_ttl - resta;
   /*memcpy(&ip_hdr->ip_ttl, &nuevo_TTL, sizeof(uint8_t));*/
   ip_hdr->ip_ttl = nuevo_TTL;
   ip_hdr->ip_sum = ip_cksum(ip_hdr,/*ntohs(ip_hdr->ip_len)*/sizeof(sr_ip_hdr_t));
   /*memcpy(&ip_hdr->ip_sum, &ip_sum, sizeof(uint16_t));*/
-  printf("PAQUETE DESPUES\n");
-  print_hdr_ip((uint8_t*)ip_hdr);
+  if (DEBUG == 1) {
+    printf("DEBUG: Paquete despues del re-checksum...\n");
+    print_hdr_ip((uint8_t*)ip_hdr);
+  }
+
 }
 
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
@@ -424,17 +414,26 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
     print_addr_eth(source_MAC);
     if(destiny_MAC != NULL){    
-      print_addr_eth(destiny_MAC);  
-          memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
+      if (DEBUG == 1) {
+        printf("DEBUG: La Destiny MAC es: ...\n");
+        print_addr_eth(destiny_MAC);  
+      }
+      memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
     }else{
-      printf("DESTINY_MAC = NULL\n");
+      if (DEBUG == 1) {
+        printf("DEBUG: DESTINY_MAC = NULL\n");
+      }
     }
     memcpy(ethHdr->ether_shost, source_MAC, ETHER_ADDR_LEN);
     ethHdr->ether_type = htons(ethertype_ip);
     sr_ip_hdr_t *ipHdr = (sr_ip_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
     memcpy(ipHdr, ip_header, ntohs(ip_header->ip_len));
-    printf("Paquete IP Creado:\n");
-    print_hdr_ip(ipHdr);
+    
+    if (DEBUG == 1) {
+      printf("DEBUG: Paquete IP Creado:\n");
+      print_hdr_ip((uint8_t*)ipHdr);
+    }
+   
     return ethPacket;
 }
 
@@ -713,7 +712,9 @@ void sr_handlepacket(struct sr_instance* sr,
   memcpy(srcAddr, eHdr->ether_shost, sizeof(uint8_t) * ETHER_ADDR_LEN);
   uint16_t pktType = ntohs(eHdr->ether_type);  
   if (is_packet_valid(packet, len)) {
-    printf("EL PAQUETE QUE ME LLEGA ES \n:");
+  if (DEBUG == 1) {
+    printf("DEBUG: EL PAQUETE QUE ME LLEGA ES: \n:");
+  }
     print_hdrs(packet,len);
     if (pktType == ethertype_arp) {
       sr_handle_arp_packet(sr, packet, len, srcAddr, destAddr, interface, eHdr);
