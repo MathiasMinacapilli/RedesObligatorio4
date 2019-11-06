@@ -399,17 +399,19 @@ sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
  ************************IS FOR MY IP**********************************
  **********************************************************************
  **********************************************************************/
-int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
+int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst){
   if (DEBUG == 1) {
     printf("DEBUG: Chequeando que el paquete IP sea para mi...\n");
   }
-  struct sr_if * interface_instance = sr_get_interface(sr , interface);
-  uint32_t interface_IP = interface_instance->ip;
-  if (interface_IP == ip_dst) {
-    if (DEBUG == 1) {
-      printf("DEBUG: El paquete IP es para mi...\n");
+  struct sr_if * my_interfaces = sr->if_list;
+  while(my_interfaces != NULL){
+    if (my_interfaces->ip == ip_dst){
+      if (DEBUG == 1) {
+        printf("DEBUG: El paquete IP es para mi...\n");
+      }
+      return 1;
     }
-    return 1;
+    my_interfaces = my_interfaces->next;
   }
   if (DEBUG == 1) {
     printf("DEBUG: El paquete IP NO es para mi...\n");
@@ -711,7 +713,7 @@ void sr_handle_ip_packet(struct sr_instance *sr,
     if (DEBUG == 1) {
       printf("DEBUG: Paquete IP sano, continua procesamiento...\n");
     }
-    int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst, interface);
+    int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst);
     /*NO HABRIA QUE PREGUNTAR POR LA MAC TAMBIEN? pa que me pasan el header_ethernet sino?*/
 
     char* is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
@@ -727,7 +729,7 @@ void sr_handle_ip_packet(struct sr_instance *sr,
           printf("DEBUG: El paquete es ICMP...\n");
         }
 
-        /*manejar icmp*/
+        /*manejar icmp, si es un echo request hay que mandar un echo reply*/
         struct sr_icmp_hdr * icmp_hdr = (struct sr_icmp_hdr *) ip_hdr + sizeof(sr_ip_hdr_t);
         if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){
           if(icmp_hdr->icmp_type == 0x08){
