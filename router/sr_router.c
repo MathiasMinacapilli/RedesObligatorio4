@@ -54,6 +54,15 @@ void sr_init(struct sr_instance* sr)
 
 } /* -- sr_init -- */
 
+
+
+/**********************************************************************
+ ************************CREAR PAQUETE ARP*****************************
+ **********************************************************************
+ **********************************************************************/
+
+
+
 uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, unsigned char* destiny_MAC, uint32_t source_IP, uint32_t destiny_IP, unsigned short oper){
 
     if (DEBUG == 1) {
@@ -84,6 +93,11 @@ uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, un
     return ethPacket;
 }
 
+
+/**********************************************************************
+ ***********************ENVIAR ARP REQUEST*****************************
+ **********************************************************************
+ **********************************************************************/
 
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
@@ -122,6 +136,14 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip2) {
 
 }
 
+
+
+/**********************************************************************
+ ************************ENVIAR ICMP ERROR*****************************
+ **********************************************************************
+ **********************************************************************/
+
+
 /* Send an ICMP error. */
 void sr_send_icmp_error_packet(uint8_t type,
                               uint8_t code,
@@ -132,6 +154,12 @@ void sr_send_icmp_error_packet(uint8_t type,
 
 }
 
+
+/**********************************************************************
+ ************************OBTENER ARP HEADER****************************
+ **********************************************************************
+ **********************************************************************/
+
 sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
   sr_arp_hdr_t *arp_hdr = malloc(sizeof(sr_arp_hdr_t));
   
@@ -139,6 +167,13 @@ sr_arp_hdr_t* get_arp_header(uint8_t *packet) {
 
   return arp_hdr;
 }
+
+
+
+/**********************************************************************
+ ******************ENVIAR PAQUETE ESPERANDO POR MAC********************
+ **********************************************************************
+ **********************************************************************/
 
 void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_packet* paquete_esperando, struct sr_instance* sr){
 
@@ -154,6 +189,12 @@ void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_pack
   sr_send_packet(sr, buf, len, iface);
 }
 
+
+
+/**********************************************************************
+ ************************INSERTAR EN CACHE ARP*************************
+ **********************************************************************
+ **********************************************************************/
 
 /* add or update sender to ARP cache */
 void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, struct sr_instance *sr) {
@@ -186,6 +227,12 @@ void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, str
   }
 }
 
+
+/**********************************************************************
+ **************************COMPARAR MACS*******************************
+ **********************************************************************
+ **********************************************************************/
+
 int compare_macs(uint8_t * mac1, uint8_t * mac2){
   int i = 0;
   for(i = 0; i < 6 ; i++){
@@ -197,6 +244,10 @@ int compare_macs(uint8_t * mac1, uint8_t * mac2){
 }
 
 
+/**********************************************************************
+ **************CHEQUEAR SI MAC DESTINO ES PARA MI INTERFAZ*************
+ **********************************************************************
+ **********************************************************************/
 /*
  * Chequear que la mac destino del paquete ARP sea una de mis interfaces, en particular
  * por la MAC que me llego definidas en sr O la MAC de broadcast*/
@@ -209,9 +260,6 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
   struct sr_ethernet_hdr * ethernet_packet = (struct sr_ethernet_hdr *)packet;
   uint8_t * destiny_MAC = ethernet_packet->ether_dhost;
   uint8_t * broadcast = generate_ethernet_addr(0xFF);
-
-
-
 
   int equals = compare_macs(destiny_MAC, broadcast);
   if (equals == 1){
@@ -229,6 +277,10 @@ int is_for_my_interfaces(struct sr_instance * sr, uint8_t *packet, char *interfa
 }
 
 
+/**********************************************************************
+ *********************MANEJAR ARP REQUEST******************************
+ **********************************************************************
+ **********************************************************************/
 
 void handle_arp_request(struct sr_instance *sr, char* interface, uint8_t *packet) {
   /* arp_request */
@@ -265,6 +317,12 @@ void handle_arp_reply(struct sr_instance *sr, unsigned char* MAC_destino, uint32
   }
   add_or_update_ARP_cache(source_ip, MAC_destino, sr);
 }
+
+
+/**********************************************************************
+ ***********************MANEJAR PAQUETE ARP****************************
+ **********************************************************************
+ **********************************************************************/
 
 void sr_handle_arp_packet(struct sr_instance *sr,
         uint8_t *packet /* lent */,
@@ -322,6 +380,12 @@ void sr_handle_arp_packet(struct sr_instance *sr,
 }
 
 
+
+/**********************************************************************
+ **********************OBTENER HEADER IP*******************************
+ **********************************************************************
+ **********************************************************************/
+
 sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
   sr_ip_hdr_t *ip_hdr_from_packet = (sr_ip_hdr_t *) (packet);
   sr_ip_hdr_t *ip_hdr = malloc(ntohs(ip_hdr_from_packet->ip_len));
@@ -330,6 +394,11 @@ sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
   return ip_hdr; 
 }
 
+
+/**********************************************************************
+ ************************IS FOR MY IP**********************************
+ **********************************************************************
+ **********************************************************************/
 int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
   if (DEBUG == 1) {
     printf("DEBUG: Chequeando que el paquete IP sea para mi...\n");
@@ -348,6 +417,12 @@ int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst, char* interface){
   return 0;
 }
 
+
+
+/**********************************************************************
+ **********************IS IN MY FORWARDING TABLE***********************
+ **********************************************************************
+ **********************************************************************/
 char* is_in_table(struct sr_instance * sr, uint32_t ip_dst){
 
   if (DEBUG == 1) {
@@ -369,6 +444,13 @@ char* is_in_table(struct sr_instance * sr, uint32_t ip_dst){
   return out_interface;
 }
 
+
+
+/**********************************************************************
+ ******************************IS ICMP*********************************
+ **********************************************************************
+ **********************************************************************/
+
 int is_ICMP(struct sr_ip_hdr* ip_hdr){
   if (ip_hdr->ip_p == 0x01){
     return 1;
@@ -385,6 +467,13 @@ int is_TTL_expired(struct sr_ip_hdr* ip_hdr){
   return 0;
 }
 
+
+
+
+/**********************************************************************
+ *****************DECREMENTAR TTL Y RE-CHECKSUM************************
+ **********************************************************************
+ **********************************************************************/
 void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
   if (DEBUG == 1) {
     printf("DEBUG: Paquete antes del re-checksum...\n");
@@ -403,6 +492,11 @@ void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
 
 }
 
+
+/**********************************************************************
+ ************************CREAR PAQUETE IP******************************
+ **********************************************************************
+ **********************************************************************/
 uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
  unsigned char* destiny_MAC, struct sr_ip_hdr * ip_header){
 
@@ -437,6 +531,12 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     return ethPacket;
 }
 
+
+
+/**********************************************************************
+ ************************MANEJAR ARP E IP******************************
+ **********************************************************************
+ **********************************************************************/
 void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* interface, unsigned int len){
 
   if (DEBUG == 1) {
@@ -477,6 +577,13 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
   }
   
 }
+
+
+
+/**********************************************************************
+ ************************CREAR PAQUETE ICMP*****************************
+ **********************************************************************
+ **********************************************************************/
 
 void create_icmp_packet(struct sr_instance * sr, char* out_interface,
   uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
@@ -574,6 +681,11 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
   }
 }
 
+
+/**********************************************************************
+ ************************MANEJAR PAQUETE IP****************************
+ **********************************************************************
+ **********************************************************************/
 void sr_handle_ip_packet(struct sr_instance *sr,
         uint8_t *packet /* lent */,
         unsigned int len,
