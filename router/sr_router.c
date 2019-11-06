@@ -87,7 +87,7 @@ uint8_t* create_arp_packet(struct sr_instance *sr, unsigned char* source_MAC, un
 
 /* Send an ARP request. */
 /*Se utiliza cuando se realiza el Forwarding (capa 3), cuando no tengo la MAC en la cache*/
-void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
+void sr_arp_request_send(struct sr_instance *sr, uint32_t ip2) {
 
   if (DEBUG == 1) {
     printf("DEBUG: Iniciando el envio de arp request...\n");
@@ -95,6 +95,7 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip) {
 
   /*Consultar cual es la if de salida [out_interdace] respecto a la routing table*/
   struct sr_rt* iter_forwarding_table = sr->routing_table;
+  uint32_t ip = ntohl(ip2);
     uint32_t maxMask = 0x00000000; /*o 0x0*, es decir, la mask menos restrictiva posible*/
     char* out_interface;
     while(iter_forwarding_table != NULL){
@@ -185,17 +186,7 @@ void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, str
   struct sr_arpentry * arp_entry = sr_arpcache_lookup(&sr->cache, source_ip);
   if(arp_entry == NULL){
     struct sr_arpcache cache = sr->cache;
-    printf("ESTOS SON LOS PARAMETROS QUE LE PASO A APCACHE INSERT\n");
-    print_addr_eth(MAC_destino);
-    print_addr_ip_int(source_ip);
-    printf("LA IP CON EL NTHOL, A LA FUNCION HAY QUE PASARSELA SIN!:\n");
-    print_addr_ip_int(ntohl(source_ip));
-    printf("TABLA ANTES DE INSERTAR:\n");
-    sr_arpcache_dump(&sr->cache);
     struct sr_arpreq *arp_req = sr_arpcache_insert(&sr->cache, MAC_destino, source_ip);
-    printf("TABLA DESPUES DE INSERTAR:\n");
-    sr_arpcache_dump(&sr->cache);
-
     if (arp_req != NULL){
       printf("EL ARP REQ != NULL\n");
       struct sr_packet* paquetes_esperando = arp_req->packets;
@@ -321,8 +312,6 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   if (is_for_me > 0) {
     if (DEBUG == 1) {
       printf("DEBUG: El paquete arp es para mi, procesando el paquete...\n");
-      printf("despues de updatear esta es la tabla \n");
-      sr_arpcache_dump(&sr->cache);
     }
       /* check if it is a request or reply*/
     unsigned short op = ntohs(arp_hdr->ar_op);
@@ -350,10 +339,9 @@ void sr_handle_arp_packet(struct sr_instance *sr,
 
 sr_ip_hdr_t* get_ip_header(uint8_t *packet) {
   sr_ip_hdr_t *ip_hdr_from_packet = (sr_ip_hdr_t *) (packet);
-  sr_ip_hdr_t *ip_hdr = malloc(sizeof(sr_ip_hdr_t));
+  sr_ip_hdr_t *ip_hdr = malloc(ntohs(ip_hdr_from_packet->ip_len));
   
-  memcpy(ip_hdr, ip_hdr_from_packet, sizeof(sr_ip_hdr_t));
-
+  memcpy(ip_hdr, ip_hdr_from_packet, ntohs(ip_hdr_from_packet->ip_len));
   return ip_hdr; 
 }
 
@@ -417,8 +405,10 @@ void decrement_TTL_and_rechecksum(struct sr_ip_hdr* ip_hdr){
   print_hdr_ip((uint8_t*)ip_hdr);
   uint8_t resta = 0x01;
   uint8_t nuevo_TTL = ip_hdr->ip_ttl - resta;
+  /*memcpy(&ip_hdr->ip_ttl, &nuevo_TTL, sizeof(uint8_t));*/
   ip_hdr->ip_ttl = nuevo_TTL;
-  ip_hdr->ip_sum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
+  ip_hdr->ip_sum = ip_cksum(ip_hdr,/*ntohs(ip_hdr->ip_len)*/sizeof(sr_ip_hdr_t));
+  /*memcpy(&ip_hdr->ip_sum, &ip_sum, sizeof(uint16_t));*/
   printf("PAQUETE DESPUES\n");
   print_hdr_ip((uint8_t*)ip_hdr);
 }
@@ -429,35 +419,22 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     if (DEBUG == 1) {
       printf("DEBUG: Creando paquete IP...\n");
     }
-    printf("ANTES DE HACER LA ASIGNACION RANCIA ESA\n");
     int ethPacketLen = sizeof(sr_ethernet_hdr_t) + ntohs(ip_header->ip_len);
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt1\n");
     uint8_t *ethPacket = malloc(ethPacketLen);
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt2\n");
     sr_ethernet_hdr_t *ethHdr = (struct sr_ethernet_hdr *) ethPacket;
     print_addr_eth(source_MAC);
-    
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt21321313123131321\n");
-    if(destiny_MAC != NULL){
-    
+    if(destiny_MAC != NULL){    
       print_addr_eth(destiny_MAC);  
           memcpy(ethHdr->ether_dhost, destiny_MAC, ETHER_ADDR_LEN);
     }else{
-      printf("DESTINY_MAC = NULL");
+      printf("DESTINY_MAC = NULL\n");
     }
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt4\n");
     memcpy(ethHdr->ether_shost, source_MAC, ETHER_ADDR_LEN);
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt5\n");
     ethHdr->ether_type = htons(ethertype_ip);
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt6\n");
     sr_ip_hdr_t *ipHdr = (sr_ip_hdr_t *) (ethPacket + sizeof(sr_ethernet_hdr_t));
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt7\n");
     memcpy(ipHdr, ip_header, ntohs(ip_header->ip_len));
-    printf("ROMPI CUANDO ENTRE AL ip->pakettt8\n");
-    printf("ACA VAN LOS HEADERS, QUE PASASI VA NULL?\n");
-    printf("SI EL PRINTF VA SIN EL /n IMPRIME DESPUES \n");
-    print_hdr_eth(ethPacket);
-    print_hdr_ip((uint8_t*)ipHdr);
+    printf("Paquete IP Creado:\n");
+    print_hdr_ip(ipHdr);
     return ethPacket;
 }
 
@@ -477,10 +454,10 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     edita el paquete y lo manda */
     /*el len que llega es de toda la trama ethernet, le saco el header ethernet*/
     printf("LA ENTRY ARP ERA NULL \n");
-    /*uint8_t * broadcast = generate_ethernet_addr(0xFF);*/
+    uint8_t * broadcast = generate_ethernet_addr(0xFF);
     /*En vez de pasar NULL se puede pasar con broadcast por ejemplo, o una direccion cualqueira, 
     sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
-    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, NULL, ip_hdr);
+    uint8_t * ethPacket = create_ip_packet(sr, source_MAC, broadcast, ip_hdr);
     printf("CREE EL PAQUETE ETHERNET PA AGREGAR A LA COLAR\n");
     fprintf(stderr, "\tlength que paso: %d\n", len);
     fprintf(stderr, "\tdestination: ");
@@ -488,7 +465,7 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     fprintf(stderr, "\tdestination: ");
     print_addr_ip_int(ip_hdr->ip_dst);
 
-    sr_arpcache_queuereq(arp_cache, ntohl(ip_hdr->ip_dst), ethPacket,len, interface);
+    sr_arpcache_queuereq(arp_cache, ip_hdr->ip_dst, ethPacket,len, interface);
     printf("LO METI PA LA COLA\n");
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
