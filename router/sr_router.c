@@ -154,13 +154,24 @@ void enviar_paquete_esperando_por_MAC(unsigned char* MAC_destino, struct sr_pack
   if (DEBUG == 1) {
     printf("DEBUG: Comienzo de envio de paquete esperando por mac...\n");
   }
-
+  printf("ESTA ES LA INTERFAZ QUE SE ROMPE???\n");
+  printf(paquete_esperando->iface);
+  printf("ROMPI 1..\n");
   struct sr_ethernet_hdr * paquete_ethernet = (struct sr_ethernet_hdr *) paquete_esperando->buf;
-  memcpy(paquete_ethernet->ether_dhost, MAC_destino, ETHER_ADDR_LEN);   
+  printf("ROMPI 2..\n");
+  memcpy(paquete_ethernet->ether_dhost, MAC_destino, ETHER_ADDR_LEN); 
+    printf("ROMPI 6..\n");  
   uint8_t *buf = paquete_esperando->buf;
+    printf("ROMPI 7..\n");
   unsigned int len = paquete_esperando->len;
+    printf("ROMPI 8..\n");
   const char* iface = paquete_esperando->iface;
+  printf("LA INTERFAZ ES:   ");
+  printf(iface);
+  printf("\n");
+    printf("ROMPI 9..\n");
   sr_send_packet(sr, buf, len, iface);
+    printf("ROMPI 10..\n");
 }
 
 
@@ -171,16 +182,34 @@ void add_or_update_ARP_cache(uint32_t source_ip, unsigned char* MAC_destino, str
     printf("DEBUG: Agregando o actualizando la ARP cache...\n");
   }
 
-  struct sr_arpcache cache = sr->cache;
-  struct sr_arpreq *arp_req = sr_arpcache_insert(&cache, MAC_destino, source_ip);
-  if (arp_req != NULL){
-    struct sr_packet* paquetes_esperando = arp_req->packets;
-    while (paquetes_esperando != NULL){
-      enviar_paquete_esperando_por_MAC(MAC_destino, paquetes_esperando, sr);
-      paquetes_esperando = paquetes_esperando->next;          
-    }
-    sr_arpreq_destroy(&cache, arp_req);      
-  }  
+  struct sr_arpentry * arp_entry = sr_arpcache_lookup(&sr->cache, source_ip);
+  if(arp_entry == NULL){
+    struct sr_arpcache cache = sr->cache;
+    printf("ESTOS SON LOS PARAMETROS QUE LE PASO A APCACHE INSERT\n");
+    print_addr_eth(MAC_destino);
+    print_addr_ip_int(source_ip);
+    printf("LA IP CON EL NTHOL, A LA FUNCION HAY QUE PASARSELA SIN!:\n");
+    print_addr_ip_int(ntohl(source_ip));
+    printf("TABLA ANTES DE INSERTAR:\n");
+    sr_arpcache_dump(&sr->cache);
+    struct sr_arpreq *arp_req = sr_arpcache_insert(&sr->cache, MAC_destino, source_ip);
+    printf("TABLA DESPUES DE INSERTAR:\n");
+    sr_arpcache_dump(&sr->cache);
+
+    if (arp_req != NULL){
+      printf("EL ARP REQ != NULL\n");
+      struct sr_packet* paquetes_esperando = arp_req->packets;
+      while (paquetes_esperando != NULL){
+        enviar_paquete_esperando_por_MAC(MAC_destino, paquetes_esperando, sr);
+        paquetes_esperando = paquetes_esperando->next;          
+      }
+      printf("ESTOY DISTROYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n");
+      sr_arpreq_destroy(&cache, arp_req);      
+      }  
+  } else {
+    printf("La asociacion IP-MAC ya se encuentra en la tabla\n");
+    free(arp_entry);
+  }
 }
 
 int compare_macs(uint8_t * mac1, uint8_t * mac2){
@@ -285,13 +314,15 @@ void sr_handle_arp_packet(struct sr_instance *sr,
   /* add or update sender to ARP cache*/
   /* actualizamos o agregamos el mapeo de IP del que recibo -> MAC del que recibo
    en la cache arp*/
-  add_or_update_ARP_cache(ntohl(arp_hdr->ar_sip), arp_hdr->ar_sha, sr);
-
+  add_or_update_ARP_cache(arp_hdr->ar_sip, arp_hdr->ar_sha, sr);
+  
   /* check if the ARP packet is for one of my interfaces. */
   int is_for_me = is_for_my_interfaces(sr, packet, interface);
   if (is_for_me > 0) {
     if (DEBUG == 1) {
       printf("DEBUG: El paquete arp es para mi, procesando el paquete...\n");
+      printf("despues de updatear esta es la tabla \n");
+      sr_arpcache_dump(&sr->cache);
     }
       /* check if it is a request or reply*/
     unsigned short op = ntohs(arp_hdr->ar_op);
@@ -309,11 +340,11 @@ void sr_handle_arp_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: Es un ARP reply...\n");
       }
-      handle_arp_reply(sr, arp_hdr->ar_sha, ntohl(arp_hdr->ar_sip));
+      handle_arp_reply(sr, arp_hdr->ar_sha, arp_hdr->ar_sip);
     }
   }
       printf("LIBERANDO ARP HEADER...\n");
-    free(arp_hdr);
+     free(arp_hdr);
 }
 
 
@@ -462,6 +493,7 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
     /*Si tengo la direccion mac, creo la trama ethernet y la mando*/
+    printf("Tengo la MAC, voy a mandar el paquete\n");
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, entry_arp->mac, ip_hdr);
     sr_send_packet(sr, ethPacket, len, interface);
     free(ethPacket);
@@ -702,9 +734,10 @@ void sr_handlepacket(struct sr_instance* sr,
   uint8_t *srcAddr = malloc(sizeof(uint8_t) * ETHER_ADDR_LEN);
   memcpy(destAddr, eHdr->ether_dhost, sizeof(uint8_t) * ETHER_ADDR_LEN);
   memcpy(srcAddr, eHdr->ether_shost, sizeof(uint8_t) * ETHER_ADDR_LEN);
-  uint16_t pktType = ntohs(eHdr->ether_type);
-
+  uint16_t pktType = ntohs(eHdr->ether_type);  
   if (is_packet_valid(packet, len)) {
+    printf("EL PAQUETE QUE ME LLEGA ES \n:");
+    print_hdrs(packet,len);
     if (pktType == ethertype_arp) {
       sr_handle_arp_packet(sr, packet, len, srcAddr, destAddr, interface, eHdr);
     } else if (pktType == ethertype_ip) {
