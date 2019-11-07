@@ -559,19 +559,13 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     /*En vez de pasar NULL se puede pasar con broadcast por ejemplo, o una direccion cualqueira, 
     sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, broadcast, ip_hdr);
-    printf("CREE EL PAQUETE ETHERNET PA AGREGAR A LA COLAR\n");
-    fprintf(stderr, "\tlength que paso: %d\n", len);
-    fprintf(stderr, "\tdestination: ");
-    print_addr_ip_int(ntohl(ip_hdr->ip_dst));
-    fprintf(stderr, "\tdestination: ");
-    print_addr_ip_int(ip_hdr->ip_dst);
-
     sr_arpcache_queuereq(arp_cache, ip_hdr->ip_dst, ethPacket,len, interface);
-    printf("LO METI PA LA COLA\n");
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
     /*Si tengo la direccion mac, creo la trama ethernet y la mando*/
-    printf("Tengo la MAC, voy a mandar el paquete\n");
+    if (DEBUG == 1) {
+      printf("DEBUG: Tengo la MAC, voy a mandar el paquete\n");
+    }
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, entry_arp->mac, ip_hdr);
     sr_send_packet(sr, ethPacket, len, interface);
     free(ethPacket);
@@ -607,7 +601,7 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     /*hacer tipo 3*/
     /*hacer el ip_hdr y pasarselo a la funcion de hacer el paquete ip, icmp va adentro 
     de ip como payload*/
-    int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
+    int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(ip_hdr->ip_len); /*Deberia ser el ip_hl en realidad!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
     uint8_t * ipPacket = malloc(ipPacketLen);
     sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
 
@@ -681,6 +675,9 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     ipHdr->ip_hl = 5; 
 
     uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
+    if (DEBUG == 1) {
+      printf("DEBUG: Mandando paquete...\n");
+    }
     sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
     free(ethPacket);
     free(ipPacket);
