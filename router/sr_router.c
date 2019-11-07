@@ -707,8 +707,6 @@ void sr_handle_ip_packet(struct sr_instance *sr,
 	/* Get IP header and addresses */
   uint8_t * ip_hdr_pointer = packet + sizeof(sr_ethernet_hdr_t);
   struct sr_ip_hdr* ip_hdr = get_ip_header(ip_hdr_pointer);
-
-  print_hdr_ip((uint8_t*)ip_hdr);
   uint32_t ip_checksum = ip_cksum(ip_hdr, sizeof(sr_ip_hdr_t));
 
 	/* Check if packet is for me or the destination is in my routing table*/
@@ -726,9 +724,6 @@ void sr_handle_ip_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: El paquete es para mi...\n");
       }
-
-
-
           printf("SE VIENE EL SIZE OOOOOOOOOOOOOOOOOOF..\n");
           printf("%d\n", sizeof(sr_ip_hdr_t));
           printf("SE FUEEEEEEEEEEEEEEEEEEEEEEE...\n");
@@ -743,7 +738,8 @@ void sr_handle_ip_packet(struct sr_instance *sr,
 
         /*manejar icmp, si es un echo request hay que mandar un echo reply*/
 
-        sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (ip_hdr + sizeof(sr_ip_hdr_t));
+        sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t) 
+            + sizeof(sr_ip_hdr_t));/*o sea (packet + 34)*/
         /*if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){*/
           fprintf(stderr, "\ttype: %d\n", icmp_hdr->icmp_type);
           print_hdr_icmp(icmp_hdr);
