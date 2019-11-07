@@ -592,6 +592,37 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
   struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
   uint32_t source_IP = out_interface_instance->ip; 
   unsigned char * source_MAC = out_interface_instance->addr;
+  if(icmp_type == 0x00){
+    int ipPacketLen = ntohs(ip_hdr->ip_len);
+    uint8_t * ipPacket = malloc(ipPacketLen);
+    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) (ipPacket);
+    memcpy(ipPacket, ip_hdr, ipPacketLen);
+
+    sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (ipPacket + sizeof(sr_ip_hdr_t));
+    icmp_hdr->icmp_code = icmp_code;
+    icmp_hdr->icmp_type = 0x00;
+    icmp_hdr->icmp_sum = icmp_cksum(icmp_hdr, ipPacketLen - sizeof(sr_ip_hdr_t));
+
+
+
+    ipHdr->ip_src = ip_hdr->ip_dst;
+    ipHdr->ip_dst = ip_hdr->ip_src;
+    ipHdr->ip_ttl = 64;
+    ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+    
+    uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
+    sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
+    printf("EL PAQUETE QUE MADNE FUE\n");
+    print_hdrs(ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t));
+    free(ethPacket);
+    free(ipPacket);
+
+
+
+
+
+    return;
+  }
   if(type_3 == icmp_type){
 
     if (DEBUG == 1) {
