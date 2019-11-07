@@ -526,10 +526,10 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
     memcpy(ipHdr, ip_header, ntohs(ip_header->ip_len));
     
     if (DEBUG == 1) {
-      printf("DEBUG: Paquete IP Creado:\n");
-      print_hdr_ip((uint8_t*)ipHdr);
+      printf("DEBUG: Paquete IP creado, con todos sus headers!!!!!!!!!!!!!!!!!:\n");
+      print_hdrs((uint8_t *) ethPacket, ethPacketLen);
     }
-   
+
     return ethPacket;
 }
 
@@ -635,6 +635,8 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     ipHdr->ip_p = 0x01;   
     ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
     ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
+    ipHdr->ip_v = (unsigned int)4;
+    ipHdr->ip_hl = 5;     
 
     ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
 
@@ -675,6 +677,8 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
     ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
     ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+    ipHdr->ip_v = (unsigned int)4;
+    ipHdr->ip_hl = 5; 
 
     uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
     sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
@@ -722,6 +726,14 @@ void sr_handle_ip_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: El paquete es para mi...\n");
       }
+
+
+
+          printf("SE VIENE EL SIZE OOOOOOOOOOOOOOOOOOF..\n");
+          printf("%d\n", sizeof(sr_ip_hdr_t));
+          printf("SE FUEEEEEEEEEEEEEEEEEEEEEEE...\n");
+
+
       /* Else if for me, check if ICMP and act accordingly*/
       if(is_ICMP(ip_hdr) > 0){
 
@@ -730,12 +742,19 @@ void sr_handle_ip_packet(struct sr_instance *sr,
         }
 
         /*manejar icmp, si es un echo request hay que mandar un echo reply*/
-        struct sr_icmp_hdr * icmp_hdr = (struct sr_icmp_hdr *) ip_hdr + sizeof(sr_ip_hdr_t);
-        if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){
+
+        sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (ip_hdr + sizeof(sr_ip_hdr_t));
+        /*if(icmp_cksum(icmp_hdr, sizeof(sr_icmp_hdr_t)) == icmp_hdr->icmp_sum){*/
+          fprintf(stderr, "\ttype: %d\n", icmp_hdr->icmp_type);
+          print_hdr_icmp(icmp_hdr);
+
+
           if(icmp_hdr->icmp_type == 0x08){
+            printf("DEBUG:EN EL IF 2222222222222222222...\n");
             create_icmp_packet(sr, interface, 0x00, 0x00, ip_hdr, eHdr->ether_shost);
-          }
-        }  else {
+          /*}*/
+          }  else {
+            printf("DEBUG:EN EL discoooooooooooooooooooordsssssss...\n");
           /*discard*/
         }
       } else {
