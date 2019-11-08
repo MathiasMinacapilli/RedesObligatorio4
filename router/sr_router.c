@@ -132,6 +132,8 @@ void sr_arp_request_send(struct sr_instance *sr, uint32_t ip2) {
   if (DEBUG == 1) {
     printf("DEBUG: Enviando paquete...\n");
   }
+
+ 
   sr_send_packet(sr, arp_request, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), instance_of_out_interface->name);
 
 }
@@ -463,9 +465,11 @@ int is_ICMP(struct sr_ip_hdr* ip_hdr){
 int is_TTL_expired(struct sr_ip_hdr* ip_hdr){
   uint8_t TTL = ip_hdr->ip_ttl;
   uint8_t expired = 0x01;
-  if(TTL == expired){
+  if(TTL <= expired){
     return 1;
+    printf("TTL EXPIRADO\n");
   }
+  printf("TTL CORRECTO\n");
   return 0;
 }
 
@@ -588,10 +592,10 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     printf("DEBUG: Creando paquete ICMP...\n");
   }
 
-  uint8_t type_3 = 0x03;
   struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
   uint32_t source_IP = out_interface_instance->ip; 
   unsigned char * source_MAC = out_interface_instance->addr;
+  
   if(icmp_type == 0x00){
     int ipPacketLen = ntohs(ip_hdr->ip_len);
     uint8_t * ipPacket = malloc(ipPacketLen);
@@ -617,13 +621,10 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     free(ethPacket);
     free(ipPacket);
 
-
-
-
-
     return;
-  }
-  if(type_3 == icmp_type){
+  } /*FIN DEL ICMP TIPO 0 , ECHO REPLY*/
+
+  if(0x03 == icmp_type){ /*network UNREACHABLE (CODIGO 0), port UNREACHABLE  */
 
     if (DEBUG == 1) {
       printf("DEBUG: ICMP de tipo 3...\n");
@@ -632,11 +633,11 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     /*hacer tipo 3*/
     /*hacer el ip_hdr y pasarselo a la funcion de hacer el paquete ip, icmp va adentro 
     de ip como payload*/
-    int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(ip_hdr->ip_len); /*Deberia ser el ip_hl en realidad!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+    int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
     uint8_t * ipPacket = malloc(ipPacketLen);
-    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
+    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) (ipPacket);
 
-    sr_icmp_t3_hdr_t * icmp3Hdr = (struct sr_icmp_t3_hdr *) ipHdr + sizeof(sr_ip_hdr_t);
+    sr_icmp_t3_hdr_t * icmp3Hdr = (struct sr_icmp_t3_hdr *) (ipPacket + sizeof(sr_ip_hdr_t));
     icmp3Hdr->icmp_type = 0x03;
     icmp3Hdr->icmp_code = icmp_code;
     icmp3Hdr->unused = 0x00;
@@ -651,12 +652,15 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     icmp3Hdr->icmp_sum = 0x00;
     icmp3Hdr->icmp_sum = icmp3_cksum(icmp3Hdr, sizeof(sr_icmp_t3_hdr_t));
 
+    printf("el hdr icmp de tipo 3 que cree\n");
+    print_hdr_icmp(icmp3Hdr);
+
 
     ipHdr->ip_tos = 0x00;
-    ipHdr->ip_len = ipPacketLen;
+    ipHdr->ip_len = htons(ipPacketLen);
     ipHdr->ip_id = 0x00;
     ipHdr->ip_off = htons(IP_DF);
-    ipHdr->ip_ttl = 0x30;
+    ipHdr->ip_ttl = 64;
     ipHdr->ip_p = 0x01;   
     ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
     ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
@@ -667,51 +671,58 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
 
     uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
     sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
+    printf("el paqete q viaja de tipo 3 \n");
+    print_hdrs(ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t));
     free(ethPacket);
     free(ipPacket);
 
+    return;
 
 
-  } else {
 
-    if (DEBUG == 1) {
-      printf("DEBUG: ICMP tipo NO 3...\n");
+  }
+  
+  if(icmp_type == 0x0B){
+    if (DEBUG == 1){
+      printf("DEBUG: ICMP tipo 11...\n");
     }
 
-    /*hacer el que corresponda*/
-    int ipPacketLen = sizeof(sr_icmp_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad*/
+    int ipPacketLen = sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
     uint8_t * ipPacket = malloc(ipPacketLen);
-    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) ipPacket;
+    sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) (ipPacket);
 
-    /*Aca irian los htons y eso ni idea*/
+    /*Casteo a el header de ICMP tipo 3, por comidad para setear los bytes 4 a 8 en 0*/
 
-    sr_icmp_hdr_t * icmpHdr = (struct sr_icmp_hdr *) ipHdr + sizeof(sr_ip_hdr_t);
-    icmpHdr->icmp_type = icmp_type;
-    icmpHdr->icmp_code = icmp_code;
+    sr_icmp_t3_hdr_t * icmp3Hdr = (struct sr_icmp_t3_hdr *) (ipPacket + sizeof(sr_ip_hdr_t));
+    icmp3Hdr->icmp_type = 0x0B;
+    icmp3Hdr->icmp_code = icmp_code;
+    icmp3Hdr->unused = 0x00;
+    icmp3Hdr->next_mtu = 0x00;
+    memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);
+    icmp3Hdr->icmp_sum = 0x00;
+    icmp3Hdr->icmp_sum = icmp3_cksum(icmp3Hdr, sizeof(sr_icmp_t3_hdr_t));
 
-    /*Esto esta en el RFC de ICMP que pa calcular el checksum tiene que ser 0*/
-    icmpHdr->icmp_sum = 0x00;
-    icmpHdr->icmp_sum = icmp_cksum(icmpHdr, sizeof(sr_icmp_hdr_t));
 
     ipHdr->ip_tos = 0x00;
-    ipHdr->ip_len = ipPacketLen;
+    ipHdr->ip_len = htons(ipPacketLen);
     ipHdr->ip_id = 0x00;
     ipHdr->ip_off = htons(IP_DF);
-    ipHdr->ip_ttl = 0x30;
+    ipHdr->ip_ttl = 64;
     ipHdr->ip_p = 0x01;   
     ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
     ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
-    ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
     ipHdr->ip_v = (unsigned int)4;
-    ipHdr->ip_hl = 5; 
+    ipHdr->ip_hl = 5;     
+
+    ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
 
     uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
-    if (DEBUG == 1) {
-      printf("DEBUG: Mandando paquete...\n");
-    }
     sr_send_packet(sr, ethPacket, ipPacketLen + sizeof(sr_ethernet_hdr_t), out_interface);
+
     free(ethPacket);
     free(ipPacket);
+
+    return;
   }
 }
 
@@ -752,10 +763,12 @@ void sr_handle_ip_packet(struct sr_instance *sr,
       if (DEBUG == 1) {
         printf("DEBUG: El paquete es para mi...\n");
       }
-          printf("SE VIENE EL SIZE OOOOOOOOOOOOOOOOOOF..\n");
-          printf("%d\n", sizeof(sr_ip_hdr_t));
-          printf("SE FUEEEEEEEEEEEEEEEEEEEEEEE...\n");
 
+      if(is_TTL_expired(ip_hdr) > 0){
+        /*mandar IMCP tipo 11, return;*/
+        create_icmp_packet(sr, interface, 0x0B, 0x00, ip_hdr, eHdr->ether_shost);
+        return;
+      }
 
       /* Else if for me, check if ICMP and act accordingly*/
       if(is_ICMP(ip_hdr) > 0){
@@ -774,11 +787,9 @@ void sr_handle_ip_packet(struct sr_instance *sr,
 
 
           if(icmp_hdr->icmp_type == 0x08){
-            printf("DEBUG:EN EL IF 2222222222222222222...\n");
             create_icmp_packet(sr, interface, 0x00, 0x00, ip_hdr, eHdr->ether_shost);
           /*}*/
           }  else {
-            printf("DEBUG:EN EL discoooooooooooooooooooordsssssss...\n");
           /*discard*/
         }
       } else {

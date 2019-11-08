@@ -71,7 +71,8 @@ void sr_handle_arp_packet(struct sr_instance*, uint8_t *, unsigned int, uint8_t 
 void sr_handle_ip_packet(struct sr_instance*, uint8_t *, unsigned int, uint8_t *, uint8_t *, char *, sr_ethernet_hdr_t *);
 void sr_arp_request_send(struct sr_instance*, uint32_t);
 void sr_send_icmp_error_packet(uint8_t, uint8_t, struct sr_instance*, uint32_t, uint8_t*);
-
+void create_icmp_packet(struct sr_instance * sr, char* out_interface,
+  uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC);
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
 void sr_set_ether_ip(struct sr_instance* , uint32_t );

@@ -57,9 +57,12 @@ void host_unreachable(struct sr_instance *sr, struct sr_arpreq *req) {
     int ipOffset = sizeof(sr_ethernet_hdr_t);
 
     while (currPacket != NULL) {
-        sr_send_icmp_error_packet(3, 1, sr,
+        /*sr_send_icmp_error_packet(3, 1, sr,
                                ((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src,
-                               currPacket->buf + ipOffset);
+                               currPacket->buf + ipOffset);*/
+        /*struct sr_if * interface = sr_get_interface_given_ip(sr,((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src );
+        create_icmp_packet(sr, interface->name, 0x03, 0x01, (sr_ip_hdr_t*) (currPacket->buf + ipOffset), ((sr_ethernet_hdr_t *)(currPacket->buf))->ether_dhost) ;
+        */
         currPacket = currPacket->next;
     }
 }
