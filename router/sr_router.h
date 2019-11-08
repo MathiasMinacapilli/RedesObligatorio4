@@ -33,6 +33,7 @@
 /* forward declare */
 struct sr_if;
 struct sr_rt;
+struct auxiliar;
 
 /* ----------------------------------------------------------------------------
  * struct sr_instance
@@ -56,6 +57,12 @@ struct sr_instance
     FILE* logfile;
 };
 
+struct auxiliar {
+  char* out_interface;
+  struct in_addr next_hop; 
+};
+typedef struct auxiliar auxiliar;
+
 /* -- sr_main.c -- */
 int sr_verify_routing_table(struct sr_instance* sr);
 
@@ -78,5 +85,7 @@ void sr_add_interface(struct sr_instance* , const char* );
 void sr_set_ether_ip(struct sr_instance* , uint32_t );
 void sr_set_ether_addr(struct sr_instance* , const unsigned char* );
 void sr_print_if_list(struct sr_instance* );
+
+void host_unreachable_router(struct sr_instance *sr, struct sr_arpreq *req);
 
 #endif /* SR_ROUTER_H */

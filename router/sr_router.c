@@ -427,25 +427,29 @@ int is_for_my_ip(struct sr_instance * sr, uint32_t ip_dst){
  **********************IS IN MY FORWARDING TABLE***********************
  **********************************************************************
  **********************************************************************/
-char* is_in_table(struct sr_instance * sr, uint32_t ip_dst){
+struct auxiliar * is_in_table(struct sr_instance * sr, uint32_t ip_dst){
 
   if (DEBUG == 1) {
     printf("DEBUG: Chequeando que el destino este en mi forwarding table...\n");
   }
 
+  struct auxiliar * devolver = malloc(sizeof(struct auxiliar));
+  devolver->out_interface = NULL;
+
   struct sr_rt* iter_forwarding_table = sr->routing_table;
   uint32_t maxMask = 0x00000000; /*o 0x0*, es decir, la mask menos restrictiva posible*/
-  char* out_interface = NULL;
+  /*char* out_interface = NULL;*/
   while(iter_forwarding_table != NULL){
    uint32_t destination = iter_forwarding_table->dest.s_addr;
       uint32_t mask = iter_forwarding_table->mask.s_addr;
       if((mask > maxMask) && ((ip_dst & mask) ^ destination) == 0){ /*el operador xor, si dos bit son iguales da 0*/
-          out_interface = iter_forwarding_table->interface;
+          devolver->out_interface = iter_forwarding_table->interface;
+          devolver->next_hop = iter_forwarding_table->gw;
           maxMask = mask;
       }
     iter_forwarding_table = iter_forwarding_table->next;
     }
-  return out_interface;
+  return devolver;
 }
 
 
@@ -543,14 +547,14 @@ uint8_t* create_ip_packet(struct sr_instance *sr, unsigned char* source_MAC,
  ************************MANEJAR ARP E IP******************************
  **********************************************************************
  **********************************************************************/
-void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* interface, unsigned int len){
+void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* interface, unsigned int len, uint32_t next_hop){
 
   if (DEBUG == 1) {
     printf("DEBUG: Manejando ARP e IP...\n");
   }
 
   struct sr_arpcache* arp_cache = &sr->cache;
-  struct sr_arpentry* entry_arp = sr_arpcache_lookup(arp_cache, ip_hdr->ip_dst);
+  struct sr_arpentry* entry_arp = sr_arpcache_lookup(arp_cache, /*ip_hdr->ip_dst*/next_hop);
   struct sr_if* interface_instance = sr_get_interface(sr, interface);
   unsigned char * source_MAC = interface_instance->addr;
   if(entry_arp == NULL){
@@ -563,7 +567,7 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     /*En vez de pasar NULL se puede pasar con broadcast por ejemplo, o una direccion cualqueira, 
     sino en el create_ip_packet le pongo un if destiny_MAC != NULL*/
     uint8_t * ethPacket = create_ip_packet(sr, source_MAC, broadcast, ip_hdr);
-    sr_arpcache_queuereq(arp_cache, ip_hdr->ip_dst, ethPacket,len, interface);
+    sr_arpcache_queuereq(arp_cache, /*ip_hdr->ip_dst*/next_hop, ethPacket,len, interface);
     free(ethPacket); /*Lo dice el comentario de sr_arpcache_queuereq*/
   } else {
     /*Si tengo la direccion mac, creo la trama ethernet y la mando*/
@@ -576,6 +580,77 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
     free(entry_arp);
   }
   
+}
+
+uint8_t* create_icmp_waiting_for_MAC(struct sr_instance * sr, char* out_interface,
+  uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
+
+  if (DEBUG == 1) {
+    printf("DEBUG: Creando paquete ICMP...\n");
+  }
+
+  struct sr_if * out_interface_instance = sr_get_interface(sr, out_interface);
+  uint32_t source_IP = out_interface_instance->ip; 
+  unsigned char * source_MAC = out_interface_instance->addr;
+
+  int ipPacketLen = sizeof(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t); /*Deberia ser el ip_hl en realidad!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+  uint8_t * ipPacket = malloc(ipPacketLen);
+  sr_ip_hdr_t *ipHdr = (struct sr_ip_hdr *) (ipPacket);
+  sr_icmp_t3_hdr_t * icmp3Hdr = (struct sr_icmp_t3_hdr *) (ipPacket + sizeof(sr_ip_hdr_t));
+  icmp3Hdr->icmp_type = 0x03;
+  icmp3Hdr->icmp_code = icmp_code;
+  icmp3Hdr->unused = 0x00;
+  icmp3Hdr->next_mtu = 0x00;
+  
+  /*icmp3Hdr->data = memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);*/
+  memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);
+  /*Esto esta en el RFC de ICMP que pa calcular el checksum tiene que ser 0*/
+  icmp3Hdr->icmp_sum = 0x00;
+  icmp3Hdr->icmp_sum = icmp3_cksum(icmp3Hdr, sizeof(sr_icmp_t3_hdr_t));
+  ipHdr->ip_ttl = 64;
+  ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+  ipHdr->ip_tos = 0x00;
+  ipHdr->ip_len = htons(ipPacketLen);
+  ipHdr->ip_id = 0x00;
+  ipHdr->ip_off = htons(IP_DF);
+  ipHdr->ip_ttl = 64;
+  ipHdr->ip_p = 0x01;   
+  ipHdr->ip_src = source_IP; /*la ip de la interfaz por la que lo saco*/
+  ipHdr->ip_dst = ip_hdr->ip_src; /*la ip del que se lo mando*/
+  ipHdr->ip_v = (unsigned int)4;
+  ipHdr->ip_hl = 5;     
+  ipHdr->ip_sum = ip_cksum(ipHdr, sizeof(sr_ip_hdr_t));
+  
+  uint8_t* ethPacket = create_ip_packet(sr, source_MAC, destiny_MAC, ipHdr);
+  return ethPacket;
+
+}
+
+
+void host_unreachable_router(struct sr_instance *sr, struct sr_arpreq *req){
+    struct sr_packet *currPacket = req->packets;
+    int ipOffset = sizeof(sr_ethernet_hdr_t);
+
+    while (currPacket != NULL) {
+       
+        uint32_t prueba = ((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src;
+        struct auxiliar* auxiliar = is_in_table(sr, prueba);
+        char* out_interface = auxiliar->out_interface;
+        uint32_t next_hop_ip = auxiliar->next_hop.s_addr;
+        struct sr_arpentry* arp_entry = sr_arpcache_lookup(&sr->cache, next_hop_ip);
+        if(arp_entry == NULL){
+          uint8_t* packet = create_icmp_waiting_for_MAC(sr, auxiliar->out_interface, 0x03, 0x01, (sr_ip_hdr_t*) (currPacket->buf + ipOffset), NULL);   
+          sr_arpcache_queuereq(&sr->cache, next_hop_ip, packet,(sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t)+sizeof(sr_icmp_t3_hdr_t)) , auxiliar->out_interface);  
+          free(packet);  
+          currPacket = currPacket->next;  
+
+        } else {
+          unsigned char * destiny_MAC = arp_entry->mac;
+          create_icmp_packet(sr, auxiliar->out_interface, 0x03, 0x01, (sr_ip_hdr_t*) (currPacket->buf + ipOffset), destiny_MAC) ;
+          currPacket = currPacket->next;
+        }
+        
+    }
 }
 
 
@@ -642,7 +717,6 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
     icmp3Hdr->icmp_code = icmp_code;
     icmp3Hdr->unused = 0x00;
 
-    /*que mierda es esto*/
     icmp3Hdr->next_mtu = 0x00;
     
     /*icmp3Hdr->data = memcpy(icmp3Hdr->data, ip_hdr, ICMP_DATA_SIZE);*/
@@ -727,6 +801,9 @@ void create_icmp_packet(struct sr_instance * sr, char* out_interface,
 }
 
 
+
+
+
 /**********************************************************************
  ************************MANEJAR PAQUETE IP****************************
  **********************************************************************
@@ -757,7 +834,8 @@ void sr_handle_ip_packet(struct sr_instance *sr,
     int is_for_me = is_for_my_ip(sr, ip_hdr->ip_dst);
     /*NO HABRIA QUE PREGUNTAR POR LA MAC TAMBIEN? pa que me pasan el header_ethernet sino?*/
 
-    char* is_in_my_routing_table = is_in_table(sr, ip_hdr->ip_dst);
+    struct auxiliar* is_in_my_routing_table_struct = is_in_table(sr, ip_hdr->ip_dst);
+    char* is_in_my_routing_table = is_in_my_routing_table_struct->out_interface;
 
     if (is_for_me > 0) {
       if (DEBUG == 1) {
@@ -826,7 +904,8 @@ void sr_handle_ip_packet(struct sr_instance *sr,
           printf("DEBUG: Decrementando TTL y re calculando checksum...\n");
         }
         decrement_TTL_and_rechecksum(ip_hdr);
-        handle_arp_and_ip(sr, ip_hdr, is_in_my_routing_table, len);
+        uint32_t next_hop_ip = is_in_my_routing_table_struct->next_hop.s_addr;
+        handle_arp_and_ip(sr, ip_hdr, is_in_my_routing_table, len, next_hop_ip);
       }
     } else {
       /* If non of the above is true, send ICMP net unreachable */

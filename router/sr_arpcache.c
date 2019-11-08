@@ -52,19 +52,45 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req)
 }
 
 void host_unreachable(struct sr_instance *sr, struct sr_arpreq *req) {
-    struct sr_packet *currPacket = req->packets;
+    
 
+    host_unreachable_router(sr, req);
+/*
+
+    struct sr_packet *currPacket = req->packets;
     int ipOffset = sizeof(sr_ethernet_hdr_t);
 
     while (currPacket != NULL) {
-        /*sr_send_icmp_error_packet(3, 1, sr,
-                               ((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src,
-                               currPacket->buf + ipOffset);*/
-        /*struct sr_if * interface = sr_get_interface_given_ip(sr,((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src );
-        create_icmp_packet(sr, interface->name, 0x03, 0x01, (sr_ip_hdr_t*) (currPacket->buf + ipOffset), ((sr_ethernet_hdr_t *)(currPacket->buf))->ether_dhost) ;
-        */
+       
+        uint32_t prueba = ((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src;
+        struct auxiliar* auxiliar = is_in_table(sr, prueba);
+        printf("ROMPO CUANDO QUIERO ENTRAR AL AUXILIAR\n");
+        char* out_interface = auxiliar->out_interface;
+        printf("PASE ESTA ASIGNACION\n");
+
+        printf("ESTA ES LA IO PDE LA ITNERFAZA QUE TOY BUSCANDO\n");
+        print_addr_ip_int(ntohl(((sr_ip_hdr_t*) (currPacket->buf + ipOffset))->ip_src));
+        if(auxiliar->out_interface == NULL){
+            printf("LA CAGUE PERRO\n");
+        }
+        printf("rompo aca\n");
+        uint32_t next_hop_ip = auxiliar->next_hop.s_addr;
+        print_addr_ip(next_hop_ip);
+        print_addr_ip_int(next_hop_ip);
+        
+        
+        printf("ROMPI AK\n");
+        struct sr_arpentry* arp_entry = sr_arpcache_lookup(&sr->cache, next_hop_ip);
+        printf("ROMPI AK2\n");
+        unsigned char * destiny_MAC = arp_entry->mac;
+        print_addr_eth(destiny_MAC);
+        
+        printf("Y EL NOMBRE QUE LA PSO LA CONCHA DE TU MADRE\n");
+
+        create_icmp_packet(sr, auxiliar->out_interface, 0x03, 0x01, (sr_ip_hdr_t*) (currPacket->buf + ipOffset), destiny_MAC) ;
+
         currPacket = currPacket->next;
-    }
+    }*/
 }
 
 /* You should not need to touch the rest of this code. */
