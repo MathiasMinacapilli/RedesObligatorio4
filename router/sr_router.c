@@ -582,6 +582,12 @@ void handle_arp_and_ip(struct sr_instance * sr, struct sr_ip_hdr* ip_hdr, char* 
   
 }
 
+/**********************************************************************
+ ***************CREAR PAQUETE ICMP ESPERANDO POR MAC*******************
+ **********************************************************************
+ **********************************************************************/
+
+
 uint8_t* create_icmp_waiting_for_MAC(struct sr_instance * sr, char* out_interface,
   uint8_t icmp_type, uint8_t icmp_code, struct sr_ip_hdr* ip_hdr, unsigned char * destiny_MAC){
 
@@ -625,6 +631,12 @@ uint8_t* create_icmp_waiting_for_MAC(struct sr_instance * sr, char* out_interfac
   return ethPacket;
 
 }
+
+
+/**********************************************************************
+ *********************HOST UNREACHABLE ROUTER**************************
+ **********************************************************************
+ **********************************************************************/
 
 
 void host_unreachable_router(struct sr_instance *sr, struct sr_arpreq *req){
